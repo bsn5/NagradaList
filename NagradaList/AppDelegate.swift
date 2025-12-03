@@ -267,7 +267,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         buttonChangeDrugieIst.frame = NSRect(x: 440, y: 26, width: 100, height: 24)
         buttonChangeDrugieIst.bezelStyle = .rounded
         buttonChangeDrugieIst.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        buttonChangeDrugieIst.keyEquivalent = "\r" // Enter для быстрого доступа
         windowController.buttonChangeDrugieIst = buttonChangeDrugieIst
         controlsContainer.addSubview(buttonChangeDrugieIst)
         
@@ -285,6 +284,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         textSearch.isBordered = true
         textSearch.bezelStyle = .roundedBezel
         textSearch.focusRingType = .exterior
+        textSearch.target = windowController
+        textSearch.action = #selector(MainWindowController.textSearchEnterPressed(_:))
         windowController.textSearch = textSearch
         controlsContainer.addSubview(textSearch)
         
@@ -295,7 +296,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         scrollView2.hasHorizontalScroller = true
         scrollView2.borderType = .bezelBorder
         
-        let grid = NSTableView(frame: scrollView2.bounds)
+        let grid = DoubleClickTableView(frame: scrollView2.bounds)
+        grid.mainController = windowController
         setupGridColumns(grid: grid)
         
         // Настройка внешнего вида таблицы
@@ -310,6 +312,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         grid.delegate = windowController
         grid.dataSource = windowController
+        grid.doubleAction = #selector(MainWindowController.gridDoubleClicked(_:))
+        grid.target = windowController
         
         scrollView2.documentView = grid
         windowController.grid = grid

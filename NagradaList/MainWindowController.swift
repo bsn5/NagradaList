@@ -445,10 +445,229 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         let windowController = AwardDetailWindowController()
         awardDetailWindowController = windowController
         windowController.isNew = isNew
+        
+        // Если передан объект nagrada, загружаем актуальные данные из базы
         if let nagrada = nagrada {
-            windowController.nagrada = nagrada
+            // Загружаем данные из базы, чтобы получить актуальные значения (включая drugie_ist)
+            if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(nagrada.id.replacingOccurrences(of: "'", with: "''"))'"),
+               let firstRow = results.first {
+                // Создаем новый объект Nagrada из актуальных данных базы
+                let updatedNagrada = Nagrada(from: firstRow)
+                windowController.nagrada = updatedNagrada
+            } else {
+                windowController.nagrada = nagrada
+            }
         }
         windowController.showWindow(nil)
+    }
+    
+    @objc func textSearchEnterPressed(_ sender: NSTextField) {
+        let searchText = sender.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if searchText.isEmpty {
+            return
+        }
+        
+        guard let grid = grid else { return }
+        
+        if filteredNagradaList.isEmpty {
+            showAlert(message: "Таблица пуста")
+            return
+        }
+        
+        // Начинаем поиск с текущей выбранной строки + 1, или с начала
+        let startIndex = grid.selectedRow >= 0 ? grid.selectedRow + 1 : 0
+        let searchTextUpper = searchText.uppercased()
+        
+        // Ищем в таблице (во всех колонках кроме последней - ID)
+        let columnIdentifiers = ["Type", "Stepen", "Nomer", "FIO", "Dolzhnost", "Chin", "Chast", "Podrazdel", "DataSozd", "DataIzm", "DrugieIst"]
+        
+        // Поиск с текущей позиции до конца
+        for i in startIndex..<filteredNagradaList.count {
+            let nagrada = filteredNagradaList[i]
+            for columnId in columnIdentifiers {
+                let cellValue: String
+                switch columnId {
+                case "Type":
+                    cellValue = nagrada.getNagradaTypeShort()
+                case "Stepen":
+                    cellValue = nagrada.stepen != nil ? String(nagrada.stepen!) : ""
+                case "Nomer":
+                    cellValue = nagrada.nomer != nil ? String(nagrada.nomer!) : ""
+                case "FIO":
+                    cellValue = nagrada.getFullName()
+                case "Dolzhnost":
+                    cellValue = nagrada.dolzhnost ?? ""
+                case "Chin":
+                    cellValue = nagrada.chin ?? ""
+                case "Chast":
+                    cellValue = nagrada.chast ?? ""
+                case "Podrazdel":
+                    cellValue = nagrada.podrazdel1 ?? ""
+                case "DataSozd":
+                    cellValue = nagrada.data_sozd ?? ""
+                case "DataIzm":
+                    cellValue = nagrada.data_izm ?? ""
+                case "DrugieIst":
+                    cellValue = nagrada.drugie_ist ?? ""
+                default:
+                    cellValue = ""
+                }
+                
+                if cellValue.uppercased().contains(searchTextUpper) {
+                    // Найдено - выделяем строку
+                    grid.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
+                    grid.scrollRowToVisible(i)
+                    return
+                }
+            }
+        }
+        
+        // Если не найдено до конца, ищем с начала до текущей позиции
+        if startIndex > 0 {
+            for i in 0..<startIndex {
+                let nagrada = filteredNagradaList[i]
+                for columnId in columnIdentifiers {
+                    let cellValue: String
+                    switch columnId {
+                    case "Type":
+                        cellValue = nagrada.getNagradaTypeShort()
+                    case "Stepen":
+                        cellValue = nagrada.stepen != nil ? String(nagrada.stepen!) : ""
+                    case "Nomer":
+                        cellValue = nagrada.nomer != nil ? String(nagrada.nomer!) : ""
+                    case "FIO":
+                        cellValue = nagrada.getFullName()
+                    case "Dolzhnost":
+                        cellValue = nagrada.dolzhnost ?? ""
+                    case "Chin":
+                        cellValue = nagrada.chin ?? ""
+                    case "Chast":
+                        cellValue = nagrada.chast ?? ""
+                    case "Podrazdel":
+                        cellValue = nagrada.podrazdel1 ?? ""
+                    case "DataSozd":
+                        cellValue = nagrada.data_sozd ?? ""
+                    case "DataIzm":
+                        cellValue = nagrada.data_izm ?? ""
+                    case "DrugieIst":
+                        cellValue = nagrada.drugie_ist ?? ""
+                    default:
+                        cellValue = ""
+                    }
+                    
+                    if cellValue.uppercased().contains(searchTextUpper) {
+                        // Найдено - выделяем строку
+                        grid.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
+                        grid.scrollRowToVisible(i)
+                        return
+                    }
+                }
+            }
+        }
+        
+        // Ничего не найдено
+        showAlert(message: "Ничего не найдено")
+    }
+    
+    @objc func gridDoubleClicked(_ sender: NSTableView) {
+        print("🖱️ gridDoubleClicked вызван")
+        openNagradaFromGrid()
+    }
+    
+    func openNagradaFromGrid() {
+        guard let grid = grid else {
+            print("❌ grid is nil")
+            return
+        }
+        
+        let selectedRow = grid.selectedRow
+        print("🔍 selectedRow = \(selectedRow), filteredNagradaList.count = \(filteredNagradaList.count)")
+        
+        // Проверяем, что строка выбрана
+        guard selectedRow >= 0 && selectedRow < filteredNagradaList.count else {
+            print("❌ Строка не выбрана или индекс вне диапазона")
+            return
+        }
+        
+        // Получаем ID выбранной записи
+        let selectedNagrada = filteredNagradaList[selectedRow]
+        let recordId = selectedNagrada.id
+        print("🔍 recordId = \(recordId)")
+        
+        // Проверяем, что ID валидный
+        guard !recordId.isEmpty else {
+            print("❌ ID пустой")
+            return
+        }
+        
+        // Загружаем данные из базы по ID (как в VB.NET: SELECT * FROM nagrada WHERE id = ...)
+        let escapedId = recordId.replacingOccurrences(of: "'", with: "''")
+        print("🔍 Загружаем данные из базы для id = \(escapedId)")
+        
+        if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(escapedId)'"),
+           let firstRow = results.first {
+            print("✅ Данные загружены из базы")
+            print("🔍 Первая строка из базы: \(firstRow)")
+            
+            // Создаем новый объект Nagrada из актуальных данных базы
+            let nagrada = Nagrada(from: firstRow)
+            print("🔍 Создан объект Nagrada: id=\(nagrada.id), фамилия=\(nagrada.фамилия ?? "nil"), имя=\(nagrada.имя ?? "nil"), komp=\(nagrada.komp ?? "nil")")
+            
+            // Создаем новое окно (как в VB.NET: Dim f As New FormNagradaNew)
+            let windowController = AwardDetailWindowController()
+            
+            // Создаем окно программно, если его нет
+            if windowController.window == nil {
+                let window = NSWindow(
+                    contentRect: NSRect(x: 0, y: 0, width: 680, height: 680),
+                    styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                    backing: .buffered,
+                    defer: false
+                )
+                window.title = "Редактор наград"
+                window.center()
+                windowController.window = window
+            }
+            
+            awardDetailWindowController = windowController
+            
+            // Устанавливаем параметры (как в VB.NET: f.edited = False, f.its_new = False)
+            windowController.isNew = false
+            windowController.edited = false
+            windowController.nagrada = nagrada
+            
+            print("✅ Окно создано, показываем...")
+            
+            // Загружаем окно, чтобы вызвать windowDidLoad
+            // Если окно создано программно, создаем содержимое
+            if windowController.window?.contentView == nil || (windowController.window?.contentView?.subviews.isEmpty ?? true) {
+                windowController.createWindowContent()
+            }
+            
+            // Загружаем окно (вызовет windowDidLoad)
+            windowController.loadWindow()
+            
+            // Убеждаемся, что fillCombos и fillForm вызываются после загрузки окна
+            // Вызываем явно, если windowDidLoad еще не отработал
+            DispatchQueue.main.async {
+                windowController.fillCombos()
+                windowController.setupNagradaCombo()
+                windowController.fillForm(from: nagrada)
+                windowController.setStatus(blocked: true) // blocked = true для существующих записей
+            }
+            
+            // Статус blocked будет установлен в windowDidLoad через setStatus(blocked: !isNew)
+            // fillCombos будет вызван в windowDidLoad
+            
+            // Показываем окно (как в VB.NET: ef.Visible = True)
+            windowController.showWindow(nil)
+            windowController.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            print("❌ Не удалось загрузить данные из базы")
+            showAlert(message: "Не удалось загрузить данные записи из базы")
+        }
     }
     
     @objc @IBAction func buttonSetOperatorNameClicked(_ sender: Any) {
@@ -708,6 +927,16 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             return max(height, 20.0) // Минимум 20px
         }
         return tableView.rowHeight
+    }
+    
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        // Разрешаем выбор строки
+        return true
+    }
+    
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        // Возвращаем стандартный row view, но можем переопределить для обработки событий
+        return nil
     }
     
     func tableViewSelectionDidChange(_ notification: Notification) {

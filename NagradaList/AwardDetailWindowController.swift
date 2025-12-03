@@ -7,7 +7,7 @@
 
 import Cocoa
 
-class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
+class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSComboBoxDelegate {
     
     @IBOutlet weak var comboKampania: NSComboBox!
     @IBOutlet weak var comboNagrada: NSComboBox!
@@ -40,7 +40,7 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
     @IBOutlet weak var textList: NSTextField!
     @IBOutlet weak var textDrugieIst: NSTextField!
     @IBOutlet weak var buttonSave: NSButton!
-    @IBOutlet weak var buttonClear: NSButton!
+    @IBOutlet weak var buttonEdit: NSButton!
     @IBOutlet weak var checkFormBlocked: NSButton!
     
     var nagrada: Nagrada?
@@ -53,6 +53,11 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
         super.windowDidLoad()
         window?.delegate = self
         
+        // Если окно создано программно, создаем содержимое
+        if window?.contentView == nil || (window?.contentView?.subviews.isEmpty ?? true) {
+            createWindowContent()
+        }
+        
         fillCombos()
         setupNagradaCombo()
         
@@ -63,6 +68,397 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
         }
         
         setStatus(blocked: !isNew)
+    }
+    
+    func createWindowContent() {
+        guard let window = window else { return }
+        
+        // Создаем основной контейнер с увеличенной высотой для лучшего размещения
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 680, height: 680))
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        
+        // Координаты в macOS идут снизу вверх, в VB.NET - сверху вниз
+        // Нужно конвертировать координаты: macOS_y = window_height - VB_y - element_height
+        
+        let windowHeight: CGFloat = 680
+        
+        // ФИО (вверху)
+        let labelF = NSTextField(labelWithString: "Фамилия:")
+        labelF.frame = NSRect(x: 10, y: windowHeight - 30, width: 70, height: 17)
+        contentView.addSubview(labelF)
+        
+        let textFField = NSTextField(frame: NSRect(x: 85, y: windowHeight - 30, width: 150, height: 22))
+        textFField.font = NSFont.systemFont(ofSize: 13)
+        textFField.target = self
+        textFField.action = #selector(textFieldChanged(_:))
+        textF = textFField
+        contentView.addSubview(textFField)
+        
+        let labelI = NSTextField(labelWithString: "Имя:")
+        labelI.frame = NSRect(x: 245, y: windowHeight - 30, width: 40, height: 17)
+        contentView.addSubview(labelI)
+        
+        let textIField = NSTextField(frame: NSRect(x: 290, y: windowHeight - 30, width: 150, height: 22))
+        textIField.font = NSFont.systemFont(ofSize: 13)
+        textIField.target = self
+        textIField.action = #selector(textFieldChanged(_:))
+        textI = textIField
+        contentView.addSubview(textIField)
+        
+        let labelO = NSTextField(labelWithString: "Отчество:")
+        labelO.frame = NSRect(x: 450, y: windowHeight - 30, width: 70, height: 17)
+        contentView.addSubview(labelO)
+        
+        let textOField = NSTextField(frame: NSRect(x: 525, y: windowHeight - 30, width: 130, height: 22))
+        textOField.font = NSFont.systemFont(ofSize: 13)
+        textOField.target = self
+        textOField.action = #selector(textFieldChanged(_:))
+        textO = textOField
+        contentView.addSubview(textOField)
+        
+        // Кампания, Награда, Номер, Степень
+        let labelKampania = NSTextField(labelWithString: "Кампания:")
+        labelKampania.frame = NSRect(x: 10, y: windowHeight - 60, width: 80, height: 17)
+        contentView.addSubview(labelKampania)
+        
+        let comboKampaniaField = NSComboBox(frame: NSRect(x: 10, y: windowHeight - 80, width: 210, height: 22))
+        comboKampaniaField.font = NSFont.systemFont(ofSize: 13)
+        comboKampaniaField.delegate = self
+        comboKampania = comboKampaniaField
+        contentView.addSubview(comboKampaniaField)
+        
+        let labelNagrada = NSTextField(labelWithString: "Награда:")
+        labelNagrada.frame = NSRect(x: 230, y: windowHeight - 60, width: 70, height: 17)
+        contentView.addSubview(labelNagrada)
+        
+        let comboNagradaField = NSComboBox(frame: NSRect(x: 230, y: windowHeight - 80, width: 210, height: 22))
+        comboNagradaField.font = NSFont.systemFont(ofSize: 13)
+        comboNagradaField.delegate = self
+        comboNagrada = comboNagradaField
+        contentView.addSubview(comboNagradaField)
+        
+        let labelNomer = NSTextField(labelWithString: "Номер:")
+        labelNomer.frame = NSRect(x: 450, y: windowHeight - 60, width: 50, height: 17)
+        contentView.addSubview(labelNomer)
+        
+        let textNomerField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 80, width: 100, height: 22))
+        textNomerField.font = NSFont.systemFont(ofSize: 13)
+        textNomerField.target = self
+        textNomerField.action = #selector(textFieldChanged(_:))
+        textNomer = textNomerField
+        contentView.addSubview(textNomerField)
+        
+        let labelStepen = NSTextField(labelWithString: "Степень:")
+        labelStepen.frame = NSRect(x: 560, y: windowHeight - 60, width: 60, height: 17)
+        contentView.addSubview(labelStepen)
+        
+        let textStepenField = NSTextField(frame: NSRect(x: 560, y: windowHeight - 80, width: 95, height: 22))
+        textStepenField.font = NSFont.systemFont(ofSize: 13)
+        textStepenField.target = self
+        textStepenField.action = #selector(textFieldChanged(_:))
+        textStepen = textStepenField
+        contentView.addSubview(textStepenField)
+        
+        // Часть, Подразделения
+        let labelChast = NSTextField(labelWithString: "Часть:")
+        labelChast.frame = NSRect(x: 10, y: windowHeight - 120, width: 50, height: 17)
+        contentView.addSubview(labelChast)
+        
+        let comboChastField = NSComboBox(frame: NSRect(x: 10, y: windowHeight - 140, width: 210, height: 22))
+        comboChastField.font = NSFont.systemFont(ofSize: 13)
+        comboChastField.delegate = self
+        comboChast = comboChastField
+        contentView.addSubview(comboChastField)
+        
+        let labelPodrazdel1 = NSTextField(labelWithString: "Подразделение 1:")
+        labelPodrazdel1.frame = NSRect(x: 230, y: windowHeight - 120, width: 120, height: 17)
+        contentView.addSubview(labelPodrazdel1)
+        
+        let comboPodrazdel1Field = NSComboBox(frame: NSRect(x: 230, y: windowHeight - 140, width: 210, height: 22))
+        comboPodrazdel1Field.font = NSFont.systemFont(ofSize: 13)
+        comboPodrazdel1Field.delegate = self
+        comboPodrazdel1 = comboPodrazdel1Field
+        contentView.addSubview(comboPodrazdel1Field)
+        
+        let labelPodrazdel2 = NSTextField(labelWithString: "Подразделение 2:")
+        labelPodrazdel2.frame = NSRect(x: 450, y: windowHeight - 120, width: 120, height: 17)
+        contentView.addSubview(labelPodrazdel2)
+        
+        let comboPodrazdel2Field = NSComboBox(frame: NSRect(x: 450, y: windowHeight - 140, width: 210, height: 22))
+        comboPodrazdel2Field.font = NSFont.systemFont(ofSize: 13)
+        comboPodrazdel2Field.delegate = self
+        comboPodrazdel2 = comboPodrazdel2Field
+        contentView.addSubview(comboPodrazdel2Field)
+        
+        // Чин, Должность
+        let labelChin = NSTextField(labelWithString: "Чин:")
+        labelChin.frame = NSRect(x: 10, y: windowHeight - 180, width: 40, height: 17)
+        contentView.addSubview(labelChin)
+        
+        let comboChinField = NSComboBox(frame: NSRect(x: 10, y: windowHeight - 200, width: 210, height: 22))
+        comboChinField.font = NSFont.systemFont(ofSize: 13)
+        comboChinField.delegate = self
+        comboChin = comboChinField
+        contentView.addSubview(comboChinField)
+        
+        let labelDolzhnost = NSTextField(labelWithString: "Должность:")
+        labelDolzhnost.frame = NSRect(x: 230, y: windowHeight - 180, width: 80, height: 17)
+        contentView.addSubview(labelDolzhnost)
+        
+        let textDolzhnostField = NSTextField(frame: NSRect(x: 230, y: windowHeight - 200, width: 430, height: 22))
+        textDolzhnostField.font = NSFont.systemFont(ofSize: 13)
+        textDolzhnostField.target = self
+        textDolzhnostField.action = #selector(textFieldChanged(_:))
+        textDolzhnost = textDolzhnostField
+        contentView.addSubview(textDolzhnostField)
+        
+        // Губерния, Уезд, Деревня
+        let labelGubernia = NSTextField(labelWithString: "Губерния:")
+        labelGubernia.frame = NSRect(x: 10, y: windowHeight - 240, width: 70, height: 17)
+        contentView.addSubview(labelGubernia)
+        
+        let textGuberniaField = NSTextField(frame: NSRect(x: 85, y: windowHeight - 240, width: 150, height: 22))
+        textGuberniaField.font = NSFont.systemFont(ofSize: 13)
+        textGuberniaField.target = self
+        textGuberniaField.action = #selector(textFieldChanged(_:))
+        textGubernia = textGuberniaField
+        contentView.addSubview(textGuberniaField)
+        
+        let labelUezd = NSTextField(labelWithString: "Уезд:")
+        labelUezd.frame = NSRect(x: 245, y: windowHeight - 240, width: 50, height: 17)
+        contentView.addSubview(labelUezd)
+        
+        let textUezdField = NSTextField(frame: NSRect(x: 300, y: windowHeight - 240, width: 150, height: 22))
+        textUezdField.font = NSFont.systemFont(ofSize: 13)
+        textUezdField.target = self
+        textUezdField.action = #selector(textFieldChanged(_:))
+        textUezd = textUezdField
+        contentView.addSubview(textUezdField)
+        
+        let labelDer = NSTextField(labelWithString: "Деревня:")
+        labelDer.frame = NSRect(x: 460, y: windowHeight - 240, width: 70, height: 17)
+        contentView.addSubview(labelDer)
+        
+        let textDerField = NSTextField(frame: NSRect(x: 535, y: windowHeight - 240, width: 125, height: 22))
+        textDerField.font = NSFont.systemFont(ofSize: 13)
+        textDerField.target = self
+        textDerField.action = #selector(textFieldChanged(_:))
+        textDer = textDerField
+        contentView.addSubview(textDerField)
+        
+        // Отличие (большое текстовое поле)
+        let labelOtlichie = NSTextField(labelWithString: "Отличие:")
+        labelOtlichie.frame = NSRect(x: 10, y: windowHeight - 380, width: 60, height: 17)
+        contentView.addSubview(labelOtlichie)
+        
+        let scrollViewOtlichie = NSScrollView(frame: NSRect(x: 10, y: windowHeight - 400, width: 650, height: 80))
+        scrollViewOtlichie.hasVerticalScroller = true
+        scrollViewOtlichie.borderType = .bezelBorder
+        let textOtlichieField = NSTextView(frame: scrollViewOtlichie.bounds)
+        textOtlichieField.font = NSFont.systemFont(ofSize: 13)
+        textOtlichie = textOtlichieField
+        // Отслеживание изменений для NSTextView через NotificationCenter
+        NotificationCenter.default.addObserver(self, selector: #selector(textViewDidChange(_:)), name: NSText.didChangeNotification, object: textOtlichieField)
+        scrollViewOtlichie.documentView = textOtlichieField
+        contentView.addSubview(scrollViewOtlichie)
+        
+        // Комментарий
+        let labelComment = NSTextField(labelWithString: "Комментарий:")
+        labelComment.frame = NSRect(x: 10, y: windowHeight - 490, width: 100, height: 17)
+        contentView.addSubview(labelComment)
+        
+        let scrollViewComment = NSScrollView(frame: NSRect(x: 115, y: windowHeight - 490, width: 555, height: 22))
+        scrollViewComment.hasVerticalScroller = false
+        scrollViewComment.borderType = .bezelBorder
+        let textCommentField = NSTextView(frame: scrollViewComment.bounds)
+        textCommentField.font = NSFont.systemFont(ofSize: 13)
+        textCommentField.isEditable = true
+        textComment = textCommentField
+        // Отслеживание изменений для NSTextView через NotificationCenter
+        NotificationCenter.default.addObserver(self, selector: #selector(textViewDidChange(_:)), name: NSText.didChangeNotification, object: textCommentField)
+        scrollViewComment.documentView = textCommentField
+        contentView.addSubview(scrollViewComment)
+        
+        // Приказ, награждение
+        let labelPrikaz = NSTextField(labelWithString: "Приказ, награждение:")
+        labelPrikaz.frame = NSRect(x: 10, y: windowHeight - 520, width: 140, height: 17)
+        contentView.addSubview(labelPrikaz)
+        
+        let textPrikazField = NSTextField(frame: NSRect(x: 10, y: windowHeight - 540, width: 210, height: 22))
+        textPrikazField.font = NSFont.systemFont(ofSize: 13)
+        textPrikazField.target = self
+        textPrikazField.action = #selector(textFieldChanged(_:))
+        textPrikaz = textPrikazField
+        contentView.addSubview(textPrikazField)
+        
+        let labelNomerPrik = NSTextField(labelWithString: "Номер приказа:")
+        labelNomerPrik.frame = NSRect(x: 10, y: windowHeight - 570, width: 110, height: 17)
+        contentView.addSubview(labelNomerPrik)
+        
+        let textNomerPrikField = NSTextField(frame: NSRect(x: 10, y: windowHeight - 590, width: 210, height: 22))
+        textNomerPrikField.font = NSFont.systemFont(ofSize: 13)
+        textNomerPrikField.target = self
+        textNomerPrikField.action = #selector(textFieldChanged(_:))
+        textNomerPrik = textNomerPrikField
+        contentView.addSubview(textNomerPrikField)
+        
+        let labelDataPrik = NSTextField(labelWithString: "Дата приказа:")
+        labelDataPrik.frame = NSRect(x: 10, y: windowHeight - 620, width: 100, height: 17)
+        contentView.addSubview(labelDataPrik)
+        
+        let textDataPrikField = NSTextField(frame: NSRect(x: 10, y: windowHeight - 640, width: 210, height: 22))
+        textDataPrikField.font = NSFont.systemFont(ofSize: 13)
+        textDataPrikField.target = self
+        textDataPrikField.action = #selector(textFieldChanged(_:))
+        textDataPrik = textDataPrikField
+        contentView.addSubview(textDataPrikField)
+        
+        // Приказ, упоминание
+        let labelOtnosh = NSTextField(labelWithString: "Приказ, упоминание:")
+        labelOtnosh.frame = NSRect(x: 230, y: windowHeight - 520, width: 150, height: 17)
+        contentView.addSubview(labelOtnosh)
+        
+        let textOtnoshField = NSTextField(frame: NSRect(x: 230, y: windowHeight - 540, width: 210, height: 22))
+        textOtnoshField.font = NSFont.systemFont(ofSize: 13)
+        textOtnoshField.target = self
+        textOtnoshField.action = #selector(textFieldChanged(_:))
+        textOtnosh = textOtnoshField
+        contentView.addSubview(textOtnoshField)
+        
+        let labelNomerOtnosh = NSTextField(labelWithString: "Номер приказа:")
+        labelNomerOtnosh.frame = NSRect(x: 230, y: windowHeight - 570, width: 110, height: 17)
+        contentView.addSubview(labelNomerOtnosh)
+        
+        let textNomerOtnoshField = NSTextField(frame: NSRect(x: 230, y: windowHeight - 590, width: 210, height: 22))
+        textNomerOtnoshField.font = NSFont.systemFont(ofSize: 13)
+        textNomerOtnoshField.target = self
+        textNomerOtnoshField.action = #selector(textFieldChanged(_:))
+        textNomerOtnosh = textNomerOtnoshField
+        contentView.addSubview(textNomerOtnoshField)
+        
+        let labelDataOtnosh = NSTextField(labelWithString: "Дата приказа:")
+        labelDataOtnosh.frame = NSRect(x: 230, y: windowHeight - 620, width: 100, height: 17)
+        contentView.addSubview(labelDataOtnosh)
+        
+        let textDataOtnoshField = NSTextField(frame: NSRect(x: 230, y: windowHeight - 640, width: 210, height: 22))
+        textDataOtnoshField.font = NSFont.systemFont(ofSize: 13)
+        textDataOtnoshField.target = self
+        textDataOtnoshField.action = #selector(textFieldChanged(_:))
+        textDataOtnosh = textDataOtnoshField
+        contentView.addSubview(textDataOtnoshField)
+        
+        // Архив
+        let labelArxiv = NSTextField(labelWithString: "Архив:")
+        labelArxiv.frame = NSRect(x: 450, y: windowHeight - 520, width: 50, height: 17)
+        contentView.addSubview(labelArxiv)
+        
+        let comboArxivField = NSComboBox(frame: NSRect(x: 450, y: windowHeight - 540, width: 210, height: 22))
+        comboArxivField.font = NSFont.systemFont(ofSize: 13)
+        comboArxivField.delegate = self
+        comboArxiv = comboArxivField
+        contentView.addSubview(comboArxivField)
+        
+        // Фонд, Опись, Дело, Лист
+        let labelFond = NSTextField(labelWithString: "Фонд:")
+        labelFond.frame = NSRect(x: 450, y: windowHeight - 570, width: 50, height: 17)
+        contentView.addSubview(labelFond)
+        
+        let textFondField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 590, width: 110, height: 22))
+        textFondField.font = NSFont.systemFont(ofSize: 13)
+        textFondField.target = self
+        textFondField.action = #selector(textFieldChanged(_:))
+        textFond = textFondField
+        contentView.addSubview(textFondField)
+        
+        let labelOpis = NSTextField(labelWithString: "Опись:")
+        labelOpis.frame = NSRect(x: 450, y: windowHeight - 620, width: 50, height: 17)
+        contentView.addSubview(labelOpis)
+        
+        let textOpisField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 640, width: 110, height: 22))
+        textOpisField.font = NSFont.systemFont(ofSize: 13)
+        textOpisField.target = self
+        textOpisField.action = #selector(textFieldChanged(_:))
+        textOpis = textOpisField
+        contentView.addSubview(textOpisField)
+        
+        let labelDelo = NSTextField(labelWithString: "Дело:")
+        labelDelo.frame = NSRect(x: 570, y: windowHeight - 570, width: 40, height: 17)
+        contentView.addSubview(labelDelo)
+        
+        let textDeloField = NSTextField(frame: NSRect(x: 570, y: windowHeight - 590, width: 90, height: 22))
+        textDeloField.font = NSFont.systemFont(ofSize: 13)
+        textDeloField.target = self
+        textDeloField.action = #selector(textFieldChanged(_:))
+        textDelo = textDeloField
+        contentView.addSubview(textDeloField)
+        
+        let labelList = NSTextField(labelWithString: "Лист:")
+        labelList.frame = NSRect(x: 570, y: windowHeight - 620, width: 40, height: 17)
+        contentView.addSubview(labelList)
+        
+        let textListField = NSTextField(frame: NSRect(x: 570, y: windowHeight - 640, width: 90, height: 22))
+        textListField.font = NSFont.systemFont(ofSize: 13)
+        textListField.target = self
+        textListField.action = #selector(textFieldChanged(_:))
+        textList = textListField
+        contentView.addSubview(textListField)
+        
+        // Другие источники
+        let labelDrugieIst = NSTextField(labelWithString: "Другие источники:")
+        labelDrugieIst.frame = NSRect(x: 450, y: windowHeight - 670, width: 130, height: 17)
+        contentView.addSubview(labelDrugieIst)
+        
+        let textDrugieIstField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 690, width: 210, height: 22))
+        textDrugieIstField.font = NSFont.systemFont(ofSize: 13)
+        textDrugieIstField.target = self
+        textDrugieIstField.action = #selector(textFieldChanged(_:))
+        textDrugieIst = textDrugieIstField
+        contentView.addSubview(textDrugieIstField)
+        
+        // Служебные отметки
+        let labelSluzhOtm = NSTextField(labelWithString: "Служебные отметки:")
+        labelSluzhOtm.frame = NSRect(x: 10, y: windowHeight - 720, width: 130, height: 17)
+        contentView.addSubview(labelSluzhOtm)
+        
+        let scrollViewSluzhOtm = NSScrollView(frame: NSRect(x: 10, y: windowHeight - 740, width: 650, height: 22))
+        scrollViewSluzhOtm.hasVerticalScroller = false
+        scrollViewSluzhOtm.borderType = .bezelBorder
+        let textSluzhOtmField = NSTextView(frame: scrollViewSluzhOtm.bounds)
+        textSluzhOtmField.font = NSFont.systemFont(ofSize: 13)
+        textSluzhOtm = textSluzhOtmField
+        // Отслеживание изменений для NSTextView через NotificationCenter
+        NotificationCenter.default.addObserver(self, selector: #selector(textViewDidChange(_:)), name: NSText.didChangeNotification, object: textSluzhOtmField)
+        scrollViewSluzhOtm.documentView = textSluzhOtmField
+        contentView.addSubview(scrollViewSluzhOtm)
+        
+        // Кнопки в левом нижнем углу (как в VB.NET: ButtonSaveNagrada.Location = (8, 618), ButtonEdit.Location = (109, 618))
+        let buttonSaveField = NSButton(title: "Сохранить", target: self, action: #selector(buttonSaveClicked(_:)))
+        buttonSaveField.frame = NSRect(x: 10, y: 10, width: 100, height: 28)
+        buttonSaveField.bezelStyle = .rounded
+        buttonSaveField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        buttonSaveField.isEnabled = false // По умолчанию неактивна, активируется только в режиме редактирования
+        buttonSave = buttonSaveField
+        contentView.addSubview(buttonSaveField)
+        
+        let buttonEditField = NSButton(title: "Изменить", target: self, action: #selector(buttonEditClicked(_:)))
+        buttonEditField.frame = NSRect(x: 120, y: 10, width: 100, height: 28)
+        buttonEditField.bezelStyle = .rounded
+        buttonEditField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        buttonEdit = buttonEditField
+        contentView.addSubview(buttonEditField)
+        
+        // CheckBox для блокировки формы (скрыт, используется только для внутренней логики)
+        checkFormBlocked = NSButton(checkboxWithTitle: "", target: self, action: #selector(checkFormBlockedClicked(_:)))
+        checkFormBlocked?.frame = NSRect(x: 0, y: 0, width: 0, height: 0)
+        checkFormBlocked?.isHidden = true
+        
+        window.contentView = contentView
+    }
+    
+    @objc func checkFormBlockedClicked(_ sender: Any) {
+        let blocked = checkFormBlocked?.state == .on
+        setStatus(blocked: blocked)
     }
     
     // IBOutlets are optional - if not connected, window will be created programmatically
@@ -97,44 +493,101 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
     }
     
     func fillForm(from nagrada: Nagrada) {
+        print("📝 fillForm вызван для nagrada с id: \(nagrada.id)")
         noEvents = true
         
-        if let komp = nagrada.komp {
-            comboKampania?.stringValue = komp
+        // Кампания - ищем значение в списке и устанавливаем индекс (как в VB.NET)
+        if let komp = nagrada.komp, !komp.isEmpty {
+            if let combo = comboKampania {
+                // Ищем значение в списке
+                let index = combo.indexOfItem(withObjectValue: komp)
+                if index != NSNotFound {
+                    combo.selectItem(at: index)
+                } else {
+                    // Если не найдено, добавляем и выбираем (как в VB.NET)
+                    combo.addItem(withObjectValue: komp)
+                    combo.selectItem(at: combo.numberOfItems - 1)
+                }
+            }
+        } else {
+            comboKampania?.deselectItem(at: comboKampania?.indexOfSelectedItem ?? -1)
         }
         
+        // Награда - устанавливаем индекс напрямую (как в VB.NET: ComboNagrada.SelectedIndex = r.Fields("nagrada").Value)
         if let nagradaType = nagrada.nagrada {
             comboNagrada?.selectItem(at: nagradaType)
+        } else {
+            comboNagrada?.deselectItem(at: comboNagrada?.indexOfSelectedItem ?? -1)
         }
         
-        textNomer?.stringValue = nagrada.nomer.map { String($0) } ?? ""
-        textStepen?.stringValue = nagrada.stepen.map { String($0) } ?? ""
+        // Номер и Степень
+        if let nomer = nagrada.nomer {
+            textNomer?.stringValue = String(nomer)
+        } else {
+            textNomer?.stringValue = ""
+        }
+        
+        if let stepen = nagrada.stepen {
+            textStepen?.stringValue = String(stepen)
+        } else {
+            textStepen?.stringValue = ""
+        }
+        
+        // ФИО
         textF?.stringValue = nagrada.фамилия ?? ""
         textI?.stringValue = nagrada.имя ?? ""
         textO?.stringValue = nagrada.отчество ?? ""
+        
+        // Часть, Подразделения, Чин - устанавливаем текст (как в VB.NET: ComboChast.Text = ...)
         comboChast?.stringValue = nagrada.chast ?? ""
         comboPodrazdel1?.stringValue = nagrada.podrazdel1 ?? ""
         comboPodrazdel2?.stringValue = nagrada.podrazdel2 ?? ""
         comboChin?.stringValue = nagrada.chin ?? ""
+        
+        // Должность
         textDolzhnost?.stringValue = nagrada.dolzhnost ?? ""
+        
+        // Губерния, Уезд, Деревня
         textGubernia?.stringValue = nagrada.Губерния ?? ""
         textUezd?.stringValue = nagrada.Уезд ?? ""
         textDer?.stringValue = nagrada.Деревня ?? ""
+        
+        // Отличие (большое текстовое поле)
         textOtlichie?.string = nagrada.otlichie ?? ""
+        
+        // Комментарий
         textComment?.string = nagrada.komment ?? ""
+        
+        // Приказ, награждение
         textPrikaz?.stringValue = nagrada.prikaz ?? ""
         textNomerPrik?.stringValue = nagrada.nomer_prik ?? ""
         textDataPrik?.stringValue = nagrada.data_prik ?? ""
+        
+        // Приказ, упоминание
         textOtnosh?.stringValue = nagrada.otnosh ?? ""
         textNomerOtnosh?.stringValue = nagrada.nomer_otnosh ?? ""
         textDataOtnosh?.stringValue = nagrada.data_otnosh ?? ""
+        
+        // Служебные отметки
         textSluzhOtm?.string = nagrada.sluzh_otm ?? ""
+        
+        // Архив - устанавливаем текст
         comboArxiv?.stringValue = nagrada.arxiv ?? ""
+        
+        // Фонд, Опись, Дело, Лист
         textFond?.stringValue = nagrada.fond ?? ""
         textOpis?.stringValue = nagrada.opis ?? ""
         textDelo?.stringValue = nagrada.delo ?? ""
         textList?.stringValue = nagrada.list ?? ""
+        
+        // Другие источники
         textDrugieIst?.stringValue = nagrada.drugie_ist ?? ""
+        
+        print("✅ fillForm завершен. Проверка значений:")
+        print("   Фамилия: \(textF?.stringValue ?? "nil")")
+        print("   Имя: \(textI?.stringValue ?? "nil")")
+        print("   Кампания: \(comboKampania?.stringValue ?? "nil")")
+        print("   Награда индекс: \(comboNagrada?.indexOfSelectedItem ?? -1)")
         
         noEvents = false
         edited = false
@@ -213,26 +666,55 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
         textList?.isEditable = !blocked
         textDrugieIst?.isEditable = !blocked
         textSluzhOtm?.isEditable = !blocked
+        
+        // Управление кнопкой Сохранить: активна только когда форма разблокирована и есть изменения
+        buttonSave?.isEnabled = !blocked && edited
+    }
+    
+    private func markAsEdited() {
+        if !noEvents {
+            edited = true
+            buttonSave?.isEnabled = true
+            window?.title = "Редактор наград (*)"
+        }
+    }
+    
+    @objc func textFieldChanged(_ sender: Any) {
+        markAsEdited()
+    }
+    
+    @objc func textViewDidChange(_ notification: Notification) {
+        markAsEdited()
+    }
+    
+    // NSComboBoxDelegate
+    func comboBoxSelectionDidChange(_ notification: Notification) {
+        markAsEdited()
     }
     
     @IBAction func buttonSaveClicked(_ sender: Any) {
-        saveData()
-    }
-    
-    @IBAction func buttonClearClicked(_ sender: Any) {
-        if !isNew {
-            showAlert(message: "Уже существующие награды очищать нельзя")
+        // Проверяем, что форма в режиме редактирования (как в VB.NET: If edited = False Then Exit Sub)
+        guard edited else {
             return
         }
         
-        let alert = NSAlert()
-        alert.messageText = "Очистить данные формы?"
-        alert.addButton(withTitle: "Да")
-        alert.addButton(withTitle: "Нет")
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            clearForm()
+        saveData()
+    }
+    
+    @IBAction func buttonEditClicked(_ sender: Any) {
+        // Проверяем, что это не новая запись (как в VB.NET: If its_new = True Then MsgBox("Нельзя редактировать новую награду"))
+        if isNew {
+            showAlert(message: "Нельзя редактировать новую награду")
+            return
         }
+        
+        // Разблокируем форму для редактирования (как в VB.NET: SetStatus(enumNagradaStatus.enabled))
+        setStatus(blocked: false)
+        edited = true
+        buttonSave?.isEnabled = true
+        
+        // Обновляем заголовок окна (как в VB.NET: Me.Text = "Редактор наград (*)")
+        window?.title = "Редактор наград (*)"
     }
     
     func saveData() {
@@ -336,6 +818,17 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate {
         if DatabaseManager.shared.executeUpdate(query) {
             edited = false
             window.title = "Редактор наград"
+            
+            // Блокируем форму после сохранения (как в VB.NET: SetStatus(enumNagradaStatus.blocked))
+            setStatus(blocked: true)
+            buttonSave?.isEnabled = false
+            
+            // Обновляем объект nagrada из базы данных
+            if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(id.replacingOccurrences(of: "'", with: "''"))'"),
+               let firstRow = results.first {
+                nagrada = Nagrada(from: firstRow)
+            }
+            
             showAlert(message: "Данные сохранены")
             
             // Update combo tables if needed
