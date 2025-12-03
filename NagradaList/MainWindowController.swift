@@ -562,8 +562,8 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             
             switch cellIdentifier {
             case "Type":
-                // В VB.NET: "крест" или "медаль" в зависимости от nagrada (0 = крест, 1 = медаль)
-                cell?.textField?.stringValue = getNagradaTypeDisplay(nagrada)
+                // В VB.NET: GetNagradaTypeShort(r) возвращает короткое название типа награды (ГК, ГМ, и т.д.)
+                cell?.textField?.stringValue = nagrada.getNagradaTypeShort()
             case "Stepen":
                 // Степень награды
                 if let stepen = nagrada.stepen {
