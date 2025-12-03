@@ -201,14 +201,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         groupBox2.boxType = .primary
         view.addSubview(groupBox2)
         
-        let comboGroup = NSComboBox(frame: NSRect(x: 10, y: 560, width: 230, height: 25))
+        // Выпадающий список для группировки - размещаем ниже заголовка NSBox
+        let comboGroup = NSComboBox(frame: NSRect(x: 10, y: 535, width: 230, height: 25))
         comboGroup.target = windowController
         comboGroup.action = #selector(MainWindowController.comboGroupChanged(_:))
         comboGroup.delegate = windowController  // Устанавливаем делегат для отслеживания изменений
         windowController.comboGroup = comboGroup
         groupBox2.addSubview(comboGroup)
         
-        let scrollView = NSScrollView(frame: NSRect(x: 10, y: 10, width: 230, height: 540))
+        // Список значений - размещаем ниже выпадающего списка
+        let scrollView = NSScrollView(frame: NSRect(x: 10, y: 10, width: 230, height: 520))
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.borderType = .bezelBorder
