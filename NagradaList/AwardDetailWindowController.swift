@@ -51,21 +51,34 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
     
     override func windowDidLoad() {
         super.windowDidLoad()
+        print("✅ windowDidLoad вызван")
         window?.delegate = self
         
-        // Если окно создано программно, создаем содержимое
-        if window?.contentView == nil || (window?.contentView?.subviews.isEmpty ?? true) {
+        // Всегда создаем содержимое, если его нет (для программно созданных окон)
+        // Проверяем, что contentView либо nil, либо пустой (нет subviews)
+        let needsContent = window?.contentView == nil || (window?.contentView?.subviews.isEmpty ?? true)
+        if needsContent {
+            print("📝 windowDidLoad: создаем содержимое окна (subviews.count = \(window?.contentView?.subviews.count ?? 0))")
             createWindowContent()
+        } else {
+            print("📝 windowDidLoad: содержимое окна уже существует (subviews.count = \(window?.contentView?.subviews.count ?? 0))")
         }
         
-        fillCombos()
-        setupNagradaCombo()
+        // Заполняем комбобоксы только если UI элементы созданы
+        if !needsContent || window?.contentView?.subviews.count ?? 0 > 0 {
+            fillCombos()
+            setupNagradaCombo()
+        }
         
-        if let nagrada = nagrada {
+        // Заполняем форму только если nagrada уже установлен (для редактирования существующей записи)
+        // Для новой записи (isNew = true) форма будет заполнена позже в buttonAddClicked
+        if let nagrada = nagrada, !isNew {
             fillForm(from: nagrada)
-        } else {
+        } else if !isNew {
+            // Если это не новая запись, но nagrada не установлен, очищаем форму
             clearForm()
         }
+        // Если isNew = true, форма будет заполнена позже в buttonAddClicked
         
         setStatus(blocked: !isNew)
     }
@@ -74,14 +87,15 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         guard let window = window else { return }
         
         // Создаем основной контейнер с увеличенной высотой для лучшего размещения
-        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 680, height: 680))
+        // Увеличиваем высоту окна, чтобы все элементы поместились (кнопки на y=10, служебные отметки на y=750-770=негативно, нужно больше места)
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 680, height: 800))
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         
         // Координаты в macOS идут снизу вверх, в VB.NET - сверху вниз
         // Нужно конвертировать координаты: macOS_y = window_height - VB_y - element_height
         
-        let windowHeight: CGFloat = 680
+        let windowHeight: CGFloat = 800
         
         // ФИО (вверху)
         let labelF = NSTextField(labelWithString: "Фамилия:")
@@ -110,7 +124,7 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         labelO.frame = NSRect(x: 450, y: windowHeight - 30, width: 70, height: 17)
         contentView.addSubview(labelO)
         
-        let textOField = NSTextField(frame: NSRect(x: 525, y: windowHeight - 30, width: 130, height: 22))
+        let textOField = NSTextField(frame: NSRect(x: 525, y: windowHeight - 30, width: 145, height: 22))
         textOField.font = NSFont.systemFont(ofSize: 13)
         textOField.target = self
         textOField.action = #selector(textFieldChanged(_:))
@@ -153,7 +167,7 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         labelStepen.frame = NSRect(x: 560, y: windowHeight - 60, width: 60, height: 17)
         contentView.addSubview(labelStepen)
         
-        let textStepenField = NSTextField(frame: NSRect(x: 560, y: windowHeight - 80, width: 95, height: 22))
+        let textStepenField = NSTextField(frame: NSRect(x: 560, y: windowHeight - 80, width: 110, height: 22))
         textStepenField.font = NSFont.systemFont(ofSize: 13)
         textStepenField.target = self
         textStepenField.action = #selector(textFieldChanged(_:))
@@ -240,7 +254,7 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         labelDer.frame = NSRect(x: 460, y: windowHeight - 240, width: 70, height: 17)
         contentView.addSubview(labelDer)
         
-        let textDerField = NSTextField(frame: NSRect(x: 535, y: windowHeight - 240, width: 125, height: 22))
+        let textDerField = NSTextField(frame: NSRect(x: 535, y: windowHeight - 240, width: 135, height: 22))
         textDerField.font = NSFont.systemFont(ofSize: 13)
         textDerField.target = self
         textDerField.action = #selector(textFieldChanged(_:))
@@ -252,7 +266,7 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         labelOtlichie.frame = NSRect(x: 10, y: windowHeight - 380, width: 60, height: 17)
         contentView.addSubview(labelOtlichie)
         
-        let scrollViewOtlichie = NSScrollView(frame: NSRect(x: 10, y: windowHeight - 400, width: 650, height: 80))
+        let scrollViewOtlichie = NSScrollView(frame: NSRect(x: 10, y: windowHeight - 400, width: 660, height: 80))
         scrollViewOtlichie.hasVerticalScroller = true
         scrollViewOtlichie.borderType = .bezelBorder
         let textOtlichieField = NSTextView(frame: scrollViewOtlichie.bounds)
@@ -404,24 +418,25 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         textList = textListField
         contentView.addSubview(textListField)
         
-        // Другие источники
+        // Другие источники (размещаем выше служебных отметок, чтобы не наезжали)
         let labelDrugieIst = NSTextField(labelWithString: "Другие источники:")
-        labelDrugieIst.frame = NSRect(x: 450, y: windowHeight - 670, width: 130, height: 17)
+        labelDrugieIst.frame = NSRect(x: 450, y: windowHeight - 680, width: 130, height: 17)
         contentView.addSubview(labelDrugieIst)
         
-        let textDrugieIstField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 690, width: 210, height: 22))
+        let textDrugieIstField = NSTextField(frame: NSRect(x: 450, y: windowHeight - 700, width: 220, height: 22))
         textDrugieIstField.font = NSFont.systemFont(ofSize: 13)
         textDrugieIstField.target = self
         textDrugieIstField.action = #selector(textFieldChanged(_:))
         textDrugieIst = textDrugieIstField
         contentView.addSubview(textDrugieIstField)
         
-        // Служебные отметки
+        // Служебные отметки (размещаем выше кнопок, чтобы не наезжали)
+        // Кнопки на y=10, высота кнопки 28, отступ 10 = 48, служебные отметки должны быть выше
         let labelSluzhOtm = NSTextField(labelWithString: "Служебные отметки:")
-        labelSluzhOtm.frame = NSRect(x: 10, y: windowHeight - 720, width: 130, height: 17)
+        labelSluzhOtm.frame = NSRect(x: 10, y: 60, width: 130, height: 17)
         contentView.addSubview(labelSluzhOtm)
         
-        let scrollViewSluzhOtm = NSScrollView(frame: NSRect(x: 10, y: windowHeight - 740, width: 650, height: 22))
+        let scrollViewSluzhOtm = NSScrollView(frame: NSRect(x: 10, y: 40, width: 660, height: 22))
         scrollViewSluzhOtm.hasVerticalScroller = false
         scrollViewSluzhOtm.borderType = .bezelBorder
         let textSluzhOtmField = NSTextView(frame: scrollViewSluzhOtm.bounds)
@@ -492,9 +507,25 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         }
     }
     
-    func fillForm(from nagrada: Nagrada) {
-        print("📝 fillForm вызван для nagrada с id: \(nagrada.id)")
+    func fillForm(copy: Bool = false) {
+        guard let nagrada = nagrada else {
+            print("⚠️ fillForm: nagrada is nil")
+            return
+        }
+        fillForm(from: nagrada, copy: copy)
+    }
+    
+    func fillForm(from nagrada: Nagrada, copy: Bool = false) {
+        print("📝 fillForm вызван для nagrada с id: \(nagrada.id), copy: \(copy)")
         noEvents = true
+        
+        // Если это не новая запись и не копирование, сохраняем ссылку на nagrada (как в VB.NET: If its_new = False Then pr = r)
+        if !isNew && !copy {
+            self.nagrada = nagrada
+        }
+        
+        edited = false
+        window?.title = "Редактор наград"
         
         // Кампания - ищем значение в списке и устанавливаем индекс (как в VB.NET)
         if let komp = nagrada.komp, !komp.isEmpty {
@@ -629,8 +660,9 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
         textList?.stringValue = ""
         textDrugieIst?.stringValue = ""
         
-        noEvents = false
         edited = false
+        window?.title = "Редактор наград"
+        noEvents = false
     }
     
     func setStatus(blocked: Bool) {

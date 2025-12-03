@@ -87,19 +87,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func createTabs(in tabView: NSTabView, windowController: MainWindowController) {
-        // Tab 1: Export to Word
-        let tab1 = NSTabViewItem(identifier: "Export")
-        tab1.label = "Выгрузка в word"
-        let view1 = createExportView(windowController: windowController)
-        tab1.view = view1
-        tabView.addTabViewItem(tab1)
-        
-        // Tab 2: Table View
+        // Tab 1: Table View (первая вкладка)
         let tab2 = NSTabViewItem(identifier: "Table")
         tab2.label = "Проверка в таблице"
         let view2 = createTableView(windowController: windowController)
         tab2.view = view2
         tabView.addTabViewItem(tab2)
+        
+        // Tab 2: Export to Word
+        let tab1 = NSTabViewItem(identifier: "Export")
+        tab1.label = "Выгрузка в word"
+        let view1 = createExportView(windowController: windowController)
+        tab1.view = view1
+        tabView.addTabViewItem(tab1)
         
         // Tab 3: Service
         let tab3 = NSTabViewItem(identifier: "Service")

@@ -430,7 +430,117 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     }
     
     @objc @IBAction func buttonAddClicked(_ sender: Any) {
-        openAwardDetail(isNew: true)
+        // Проверяем, не открыта ли уже карточка и не редактируется ли она (как в VB.NET: If f2.edited = True Then)
+        if let existingController = awardDetailWindowController,
+           let existingWindow = existingController.window,
+           existingWindow.isVisible,
+           existingController.edited {
+            showAlert(message: "Карточка уже открыта и редактируется")
+            return
+        }
+        
+        // Создаем контроллер окна (как в VB.NET: f2 - это уже существующая форма)
+        let windowController = AwardDetailWindowController()
+        awardDetailWindowController = windowController
+        windowController.isNew = true
+        
+        // Создаем окно программно, если его нет (как в openNagradaFromGrid)
+        if windowController.window == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 680, height: 800),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Редактор наград"
+            window.center()
+            windowController.window = window
+        }
+        
+        // Загружаем окно, чтобы UI элементы были созданы (как в VB.NET: форма уже существует)
+        // loadWindow() должен вызвать windowDidLoad, который создаст содержимое
+        print("📝 Загружаем окно...")
+        windowController.loadWindow() // Это вызовет windowDidLoad и создаст все UI элементы
+        
+        // Убеждаемся, что содержимое окна создано (на случай, если windowDidLoad не вызвался или не создал содержимое)
+        // Для программно созданных окон windowDidLoad может не вызваться автоматически
+        if let contentView = windowController.window?.contentView {
+            let subviewCount = contentView.subviews.count
+            print("📝 Проверка содержимого после loadWindow: subviews.count = \(subviewCount)")
+            if subviewCount == 0 {
+                print("⚠️ Содержимое окна пустое, вызываем createWindowContent() напрямую")
+                windowController.createWindowContent()
+                windowController.fillCombos()
+                windowController.setupNagradaCombo()
+            } else {
+                print("✅ Содержимое окна создано, subviews.count = \(subviewCount)")
+            }
+        } else {
+            print("⚠️ contentView отсутствует, создаем его")
+            windowController.createWindowContent()
+            windowController.fillCombos()
+            windowController.setupNagradaCombo()
+        }
+        
+        // Дополнительная проверка: если windowDidLoad не вызвался, вызываем его вручную
+        // Это гарантирует, что все инициализации выполнены
+        if windowController.window?.contentView?.subviews.count ?? 0 == 0 {
+            print("⚠️ windowDidLoad не создал содержимое, вызываем его вручную")
+            windowController.windowDidLoad()
+        }
+        
+        // Проверяем, есть ли записи в базе (как в VB.NET: If RecordCount("nagrada") = 0 Then)
+        let recordCount = DatabaseManager.shared.executeQuery("SELECT COUNT(*) as count FROM nagrada")
+        let count = (recordCount?.first?["count"] as? Int64) ?? 0
+        
+        if count == 0 {
+            // База пуста - просто очищаем форму (как в VB.NET: f2.ClearForm())
+            windowController.clearForm()
+        } else {
+            // База не пуста - спрашиваем, заполнить по последним данным? (как в VB.NET: MsgBox)
+            let alert = NSAlert()
+            alert.messageText = "Заполнить по последним данным?"
+            alert.addButton(withTitle: "Да")
+            alert.addButton(withTitle: "Нет")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // Да - загружаем последнюю запись (как в VB.NET: ORDER BY data_sozd, MoveLast, FillForm(r, True))
+                if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada ORDER BY data_sozd DESC LIMIT 1"),
+                   let firstRow = results.first {
+                    let lastNagrada = Nagrada(from: firstRow)
+                    windowController.nagrada = lastNagrada
+                    // Заполняем форму данными последней записи (copy = True, как в VB.NET: FillForm(r, True))
+                    // UI элементы уже созданы в windowDidLoad, поэтому можем заполнять форму
+                    print("✅ Заполняем форму данными последней записи (copy = true)")
+                    windowController.fillForm(copy: true)
+                } else {
+                    print("⚠️ Не удалось загрузить последнюю запись")
+                    windowController.clearForm()
+                }
+            } else {
+                // Нет - просто очищаем форму (как в VB.NET: f2.ClearForm())
+                print("✅ Очищаем форму (пользователь выбрал 'Нет')")
+                windowController.clearForm()
+            }
+        }
+        
+        // Разблокируем форму для редактирования (как в VB.NET: f2.SetStatus(FormNagradaNew.enumNagradaStatus.enabled))
+        windowController.setStatus(blocked: false)
+        windowController.edited = false // Сбрасываем флаг редактирования, так как это новая запись
+        
+        // Показываем окно (как в VB.NET: f2.Show())
+        print("✅ Показываем окно детальной формы")
+        guard let window = windowController.window else {
+            print("❌ Окно не создано!")
+            return
+        }
+        
+        windowController.showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        print("✅ Окно должно быть видимо. isVisible: \(window.isVisible), isKeyWindow: \(window.isKeyWindow)")
     }
     
     @objc @IBAction func buttonOpenNagradaFormClicked(_ sender: Any) {
