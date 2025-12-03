@@ -239,12 +239,58 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         groupBox3.boxType = .primary
         view.addSubview(groupBox3)
         
-        let textSearch = NSTextField(frame: NSRect(x: 100, y: 560, width: 200, height: 25))
-        textSearch.placeholderString = "Найти в таблице"
-        windowController.textSearch = textSearch
-        groupBox3.addSubview(textSearch)
+        // Контейнер для элементов управления над таблицей
+        // Размещаем ниже заголовка NSBox (который занимает ~25-30px сверху)
+        let controlsContainer = NSView(frame: NSRect(x: 10, y: 525, width: 680, height: 50))
+        groupBox3.addSubview(controlsContainer)
         
-        let scrollView2 = NSScrollView(frame: NSRect(x: 10, y: 100, width: 680, height: 450))
+        // Метка "Изменить др. источн.:" - улучшенное оформление
+        let labelDrugieIst = NSTextField(labelWithString: "Изменить др. источн.:")
+        labelDrugieIst.frame = NSRect(x: 0, y: 28, width: 140, height: 20)
+        labelDrugieIst.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        labelDrugieIst.textColor = .labelColor
+        labelDrugieIst.alignment = .right
+        controlsContainer.addSubview(labelDrugieIst)
+        
+        // Поле ввода для "др. источн." - улучшенное оформление
+        let textDrugieIst = NSTextField(frame: NSRect(x: 150, y: 26, width: 280, height: 24))
+        textDrugieIst.placeholderString = "Введите значение"
+        textDrugieIst.font = NSFont.systemFont(ofSize: 13)
+        textDrugieIst.isBordered = true
+        textDrugieIst.bezelStyle = .roundedBezel
+        textDrugieIst.focusRingType = .exterior
+        windowController.textDrugieIst = textDrugieIst
+        controlsContainer.addSubview(textDrugieIst)
+        
+        // Кнопка "Изменить" - улучшенное оформление
+        let buttonChangeDrugieIst = NSButton(title: "Изменить", target: windowController, action: #selector(MainWindowController.buttonChangeDrugieIstClicked(_:)))
+        buttonChangeDrugieIst.frame = NSRect(x: 440, y: 26, width: 100, height: 24)
+        buttonChangeDrugieIst.bezelStyle = .rounded
+        buttonChangeDrugieIst.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        buttonChangeDrugieIst.keyEquivalent = "\r" // Enter для быстрого доступа
+        windowController.buttonChangeDrugieIst = buttonChangeDrugieIst
+        controlsContainer.addSubview(buttonChangeDrugieIst)
+        
+        // Поле поиска - улучшенное оформление
+        let labelSearch = NSTextField(labelWithString: "Поиск:")
+        labelSearch.frame = NSRect(x: 0, y: 2, width: 50, height: 20)
+        labelSearch.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        labelSearch.textColor = .labelColor
+        labelSearch.alignment = .right
+        controlsContainer.addSubview(labelSearch)
+        
+        let textSearch = NSTextField(frame: NSRect(x: 60, y: 0, width: 220, height: 24))
+        textSearch.placeholderString = "Найти в таблице"
+        textSearch.font = NSFont.systemFont(ofSize: 13)
+        textSearch.isBordered = true
+        textSearch.bezelStyle = .roundedBezel
+        textSearch.focusRingType = .exterior
+        windowController.textSearch = textSearch
+        controlsContainer.addSubview(textSearch)
+        
+        // Таблица - размещаем ниже элементов управления
+        // Высота: 600 (общая) - 30 (заголовок) - 50 (элементы управления) - 10 (отступ снизу) = 510
+        let scrollView2 = NSScrollView(frame: NSRect(x: 10, y: 10, width: 680, height: 510))
         scrollView2.hasVerticalScroller = true
         scrollView2.hasHorizontalScroller = true
         scrollView2.borderType = .bezelBorder

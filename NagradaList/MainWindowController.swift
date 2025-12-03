@@ -463,6 +463,81 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         showAlert(message: "Имя оператора изменено")
     }
     
+    @objc @IBAction func buttonChangeDrugieIstClicked(_ sender: Any) {
+        guard let grid = grid else { return }
+        
+        if filteredNagradaList.isEmpty {
+            showAlert(message: "Таблица пуста")
+            return
+        }
+        
+        let selectedIndexes = grid.selectedRowIndexes
+        if selectedIndexes.isEmpty {
+            showAlert(message: "Выберите строки для изменения")
+            return
+        }
+        
+        // Собираем уникальные ID выбранных записей
+        var idsToChange: Set<String> = []
+        for index in selectedIndexes {
+            if index >= 0 && index < filteredNagradaList.count {
+                idsToChange.insert(filteredNagradaList[index].id)
+            }
+        }
+        
+        if idsToChange.isEmpty {
+            showAlert(message: "Не удалось определить выбранные записи")
+            return
+        }
+        
+        let count = idsToChange.count
+        let alert = NSAlert()
+        alert.messageText = "Подтверждение"
+        alert.informativeText = "Вы собираетесь изменить следующее количество карточек: \(count). Продолжить?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Да")
+        alert.addButton(withTitle: "Нет")
+        
+        let response = alert.runModal()
+        if response != .alertFirstButtonReturn {
+            return
+        }
+        
+        // Получаем значение из поля ввода и экранируем его для SQL
+        let newValue = textDrugieIst?.stringValue ?? ""
+        let escapedValue = newValue.replacingOccurrences(of: "'", with: "''")
+        
+        // Обновляем каждую выбранную запись
+        var updatedCount = 0
+        for id in idsToChange {
+            let escapedId = id.replacingOccurrences(of: "'", with: "''")
+            let query = "UPDATE nagrada SET drugie_ist = '\(escapedValue)' WHERE id = '\(escapedId)'"
+            if DatabaseManager.shared.executeUpdate(query) {
+                updatedCount += 1
+            }
+        }
+        
+        if updatedCount > 0 {
+            // Обновляем данные в таблице
+            // Сначала обновляем nagradaList
+            loadNagradaList()
+            
+            // Затем обновляем filteredNagradaList в зависимости от текущего фильтра
+            if let selectedValue = selectedGroupValue {
+                // Если есть активный фильтр, применяем его снова
+                filterTableByGroup()
+            } else {
+                // Если фильтра нет, просто обновляем filteredNagradaList из nagradaList
+                filteredNagradaList = nagradaList
+            }
+            
+            grid.reloadData()
+            showAlert(message: "Готово. Обновлено записей: \(updatedCount)")
+        } else {
+            showAlert(message: "Ошибка при обновлении записей")
+        }
+    }
+    
     @objc @IBAction func buttonMakeClicked(_ sender: Any) {
         let checkRules = checkRules?.state == .on
         let checkOpredeleniya = checkOpredeleniya?.state == .on
