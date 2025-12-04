@@ -94,35 +94,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tab2.view = view2
         tabView.addTabViewItem(tab2)
         
-        // Tab 2: Export to Word
-        let tab1 = NSTabViewItem(identifier: "Export")
-        tab1.label = "Выгрузка в word"
-        let view1 = createExportView(windowController: windowController)
-        tab1.view = view1
-        tabView.addTabViewItem(tab1)
-        
-        // Tab 3: Service
-        let tab3 = NSTabViewItem(identifier: "Service")
-        tab3.label = "Служебная"
-        let view3 = createServiceView(windowController: windowController)
-        tab3.view = view3
-        tabView.addTabViewItem(tab3)
-        
-        // Tab 4: Number Conditions
+        // Tab 2: Number Conditions
         let tab4 = NSTabViewItem(identifier: "NumberConditions")
         tab4.label = "Условия на номера"
         let view4 = createNumberConditionsView(windowController: windowController)
         tab4.view = view4
         tabView.addTabViewItem(tab4)
         
-        // Tab 5: Group Replacement
+        // Tab 3: Group Replacement
         let tab5 = NSTabViewItem(identifier: "GroupReplacement")
         tab5.label = "Групповая замена"
         let view5 = createGroupReplacementView(windowController: windowController)
         tab5.view = view5
         tabView.addTabViewItem(tab5)
         
-        // Tab 6: Unload
+        // Tab 4: Unload
         let tab6 = NSTabViewItem(identifier: "Unload")
         tab6.label = "Сдача папки"
         let view6 = createUnloadView(windowController: windowController)
@@ -131,49 +117,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Store tabView reference
         windowController.tabView = tabView
-    }
-    
-    func createExportView(windowController: MainWindowController) -> NSView {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
-        
-        let label = NSTextField(labelWithString: "Перед началом выгрузки закройте основную программу.")
-        label.frame = NSRect(x: 20, y: 650, width: 600, height: 20)
-        label.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(label)
-        
-        let groupBox = NSBox(frame: NSRect(x: 20, y: 450, width: 500, height: 200))
-        groupBox.title = ""
-        groupBox.boxType = .primary
-        view.addSubview(groupBox)
-        
-        let checkRules = NSButton(checkboxWithTitle: "Проверка по правилам", target: windowController, action: nil)
-        checkRules.frame = NSRect(x: 20, y: 150, width: 200, height: 20)
-        checkRules.state = .on
-        windowController.checkRules = checkRules
-        groupBox.addSubview(checkRules)
-        
-        let checkOpredeleniya = NSButton(checkboxWithTitle: "Выгрузить определения", target: windowController, action: nil)
-        checkOpredeleniya.frame = NSRect(x: 20, y: 120, width: 200, height: 20)
-        checkOpredeleniya.state = .on
-        windowController.checkOpredeleniya = checkOpredeleniya
-        groupBox.addSubview(checkOpredeleniya)
-        
-        let labelStatus = NSTextField(labelWithString: "Состояние: готово")
-        labelStatus.frame = NSRect(x: 20, y: 80, width: 400, height: 20)
-        windowController.labelStatus = labelStatus
-        groupBox.addSubview(labelStatus)
-        
-        let progressBar = NSProgressIndicator(frame: NSRect(x: 20, y: 50, width: 450, height: 20))
-        progressBar.style = .bar
-        windowController.progressBar = progressBar
-        groupBox.addSubview(progressBar)
-        
-        let buttonMake = NSButton(title: "Сделать отчет", target: windowController, action: #selector(MainWindowController.buttonMakeClicked(_:)))
-        buttonMake.frame = NSRect(x: 350, y: 10, width: 120, height: 30)
-        windowController.buttonMake = buttonMake
-        groupBox.addSubview(buttonMake)
-        
-        return view
     }
     
     func createTableView(windowController: MainWindowController) -> NSView {
@@ -349,30 +292,97 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    func createServiceView(windowController: MainWindowController) -> NSView {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
-        
-        let textOperatorName = NSTextField(frame: NSRect(x: 350, y: 600, width: 400, height: 25))
-        textOperatorName.placeholderString = "Имя оператора"
-        windowController.textOperatorName = textOperatorName
-        view.addSubview(textOperatorName)
-        
-        let buttonSetOperatorName = NSButton(title: "Установить", target: windowController, action: #selector(MainWindowController.buttonSetOperatorNameClicked(_:)))
-        buttonSetOperatorName.frame = NSRect(x: 760, y: 600, width: 100, height: 30)
-        windowController.buttonSetOperatorName = buttonSetOperatorName
-        view.addSubview(buttonSetOperatorName)
-        
-        let textFilePath = NSTextField(frame: NSRect(x: 350, y: 550, width: 500, height: 25))
-        textFilePath.isEditable = false
-        windowController.textFilePath = textFilePath
-        view.addSubview(textFilePath)
-        
-        return view
-    }
-    
     func createNumberConditionsView(windowController: MainWindowController) -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
-        // Basic implementation
+        
+        // Кнопки управления - размещаем вверху с отступами
+        let buttonFill = NSButton(title: "Заполнить", target: windowController, action: #selector(MainWindowController.buttonLoadNomerCondClicked(_:)))
+        buttonFill.frame = NSRect(x: 20, y: 650, width: 120, height: 30)
+        buttonFill.bezelStyle = .rounded
+        windowController.buttonLoadNomerCond = buttonFill
+        view.addSubview(buttonFill)
+        
+        let buttonSave = NSButton(title: "Сохранить", target: windowController, action: #selector(MainWindowController.buttonSaveNomerCondClicked(_:)))
+        buttonSave.frame = NSRect(x: 150, y: 650, width: 120, height: 30)
+        buttonSave.bezelStyle = .rounded
+        windowController.buttonSaveNomerCond = buttonSave
+        view.addSubview(buttonSave)
+        
+        // Кнопка для добавления новой строки
+        let buttonAddRow = NSButton(title: "Добавить строку", target: windowController, action: #selector(MainWindowController.buttonAddNomerCondRowClicked(_:)))
+        buttonAddRow.frame = NSRect(x: 280, y: 650, width: 130, height: 30)
+        buttonAddRow.bezelStyle = .rounded
+        view.addSubview(buttonAddRow)
+        
+        // Кнопка для удаления выбранной строки
+        let buttonDeleteRow = NSButton(title: "Удалить строку", target: windowController, action: #selector(MainWindowController.buttonDeleteNomerCondRowClicked(_:)))
+        buttonDeleteRow.frame = NSRect(x: 420, y: 650, width: 130, height: 30)
+        buttonDeleteRow.bezelStyle = .rounded
+        view.addSubview(buttonDeleteRow)
+        
+        // Group box для таблицы условий - размещаем ниже кнопок с достаточным отступом
+        // Кнопки на y=650, высота 30, значит занимают от y=650 до y=680
+        // GroupBox размещаем ниже, начиная с y=100, чтобы был достаточный отступ от кнопок
+        // Высота view = 700, кнопки занимают 650-680, значит для groupBox остается 0-640
+        // Размещаем groupBox на y=100, высота 540, значит занимает 100-640 - идеально
+        let groupBox = NSBox(frame: NSRect(x: 20, y: 100, width: 520, height: 540))
+        groupBox.title = "Условия на номера"
+        groupBox.boxType = .primary
+        groupBox.contentViewMargins = NSSize(width: 10, height: 10) // Отступы внутри box
+        view.addSubview(groupBox)
+        
+        // Таблица условий - ширина = сумма ширин трех колонок (200 + 150 + 150 = 500)
+        // Размещаем внутри groupBox с учетом заголовка (~25-30px) и отступов (10px сверху и снизу)
+        // GroupBox высота 540, заголовок ~30px, отступы 10px сверху и снизу = 20px
+        // Значит для таблицы остается: 540 - 30 - 20 = 490px по высоте
+        let scrollView = NSScrollView(frame: NSRect(x: 10, y: 10, width: 500, height: 490))
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false // Отключаем горизонтальный скролл, так как ширина фиксирована
+        scrollView.borderType = .bezelBorder
+        scrollView.autohidesScrollers = true
+        
+        let grid = NSTableView(frame: scrollView.bounds)
+        grid.gridStyleMask = [.solidHorizontalGridLineMask, .solidVerticalGridLineMask]
+        grid.intercellSpacing = NSSize(width: 1, height: 4)
+        grid.rowHeight = 24.0
+        grid.usesAlternatingRowBackgroundColors = true
+        grid.allowsColumnReordering = false
+        grid.allowsColumnResizing = true
+        grid.selectionHighlightStyle = .regular
+        grid.allowsEmptySelection = true
+        grid.allowsMultipleSelection = false
+        // Настройка для редактирования ячеек как в DataGridView
+        grid.doubleAction = #selector(MainWindowController.gridNomerConditionsDoubleClicked(_:))
+        grid.target = windowController
+        
+        // Колонки таблицы
+        let columns = [
+            ("Type", "Тип", 200),
+            ("Stepen", "Степень", 150),
+            ("MaxNomer", "Макс. номер", 150)
+        ]
+        
+        for (identifier, title, width) in columns {
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
+            column.title = title
+            column.width = CGFloat(width)
+            column.minWidth = CGFloat(width)
+            column.maxWidth = CGFloat(width) // Фиксируем ширину колонок
+            column.resizingMask = [] // Запрещаем изменение размера (пустой массив опций)
+            column.isEditable = true
+            grid.addTableColumn(column)
+        }
+        
+        // Устанавливаем фиксированную ширину таблицы (сумма ширин колонок)
+        grid.columnAutoresizingStyle = .noColumnAutoresizing // Отключаем автоматическое изменение размера
+        
+        grid.delegate = windowController
+        grid.dataSource = windowController
+        
+        scrollView.documentView = grid
+        windowController.gridNomerConditions = grid
+        groupBox.addSubview(scrollView)
+        
         return view
     }
     

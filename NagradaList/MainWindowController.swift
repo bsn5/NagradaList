@@ -11,14 +11,7 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     
     var tabView: NSTabView?
     
-    // Tab 1: Export to Word
-    @IBOutlet weak var checkRules: NSButton!
-    @IBOutlet weak var checkOpredeleniya: NSButton!
-    @IBOutlet weak var labelStatus: NSTextField!
-    @IBOutlet weak var progressBar: NSProgressIndicator!
-    @IBOutlet weak var buttonMake: NSButton!
-    
-    // Tab 2: Table View
+    // Tab 1: Table View
     @IBOutlet weak var buttonOpenBase: NSButton!
     @IBOutlet weak var comboGroup: NSComboBox!
     @IBOutlet weak var listGroup: NSTableView!
@@ -29,21 +22,12 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     @IBOutlet weak var textDrugieIst: NSTextField!
     @IBOutlet weak var buttonChangeDrugieIst: NSButton!
     
-    // Tab 3: Service
-    @IBOutlet weak var listReqFields: NSTableView!
-    @IBOutlet weak var buttonFillReqFields: NSButton!
-    @IBOutlet weak var buttonSaveReqFields: NSButton!
-    @IBOutlet weak var buttonClearReqFields: NSButton!
-    @IBOutlet weak var textOperatorName: NSTextField!
-    @IBOutlet weak var buttonSetOperatorName: NSButton!
-    @IBOutlet weak var textFilePath: NSTextField!
-    
-    // Tab 4: Number Conditions
+    // Tab 2: Number Conditions
     @IBOutlet weak var gridNomerConditions: NSTableView!
     @IBOutlet weak var buttonLoadNomerCond: NSButton!
     @IBOutlet weak var buttonSaveNomerCond: NSButton!
     
-    // Tab 5: Group Replacement
+    // Tab 3: Group Replacement
     @IBOutlet weak var comboPole: NSComboBox!
     @IBOutlet weak var comboSravnenieType: NSComboBox!
     @IBOutlet weak var textZnachenie: NSTextView!
@@ -79,6 +63,14 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     var groupListItems: [String] = []
     var selectedGroupValue: String? = nil
     
+    // Number conditions
+    struct NumberCondition {
+        var type: Int  // Тип награды (0 - крест, 1 - медаль)
+        var stepen: Int  // Степень
+        var maxNomer: Int  // Максимальный номер
+    }
+    var nomerConditions: [NumberCondition] = []
+    
     override func windowDidLoad() {
         super.windowDidLoad()
         
@@ -88,7 +80,6 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     
     func setupUI() {
         window?.title = "Рабочее место оператора: \(DatabaseManager.shared.getUserName())"
-        textOperatorName?.stringValue = DatabaseManager.shared.getUserName()
         
         // Setup combo boxes
         setupComboGroup()
@@ -99,15 +90,6 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         
         // Setup table view
         setupTableView()
-        
-        // Setup checkboxes
-        checkRules?.state = .on
-        checkOpredeleniya?.state = .on
-        
-        // Setup file path
-        let fileManager = FileManager.default
-        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        textFilePath?.stringValue = documentsPath.appendingPathComponent("base.db").path
     }
     
     // Список категорий для фильтрации
@@ -544,31 +526,117 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     }
     
     @objc @IBAction func buttonOpenNagradaFormClicked(_ sender: Any) {
-        let selectedRow = grid?.selectedRow ?? -1
-        if selectedRow >= 0 && selectedRow < filteredNagradaList.count {
-            openAwardDetail(isNew: false, nagrada: filteredNagradaList[selectedRow])
+        guard let grid = grid else {
+            showAlert(message: "Таблица не загружена")
+            return
         }
+        
+        let selectedRow = grid.selectedRow
+        print("🔍 buttonOpenNagradaFormClicked: selectedRow = \(selectedRow), filteredNagradaList.count = \(filteredNagradaList.count)")
+        
+        // Проверяем, что строка выбрана
+        guard selectedRow >= 0 && selectedRow < filteredNagradaList.count else {
+            showAlert(message: "Выберите строку в таблице")
+            return
+        }
+        
+        // Получаем выбранную запись
+        let selectedNagrada = filteredNagradaList[selectedRow]
+        let recordId = selectedNagrada.id
+        print("🔍 recordId = \(recordId)")
+        
+        // Проверяем, что ID валидный
+        guard !recordId.isEmpty else {
+            print("❌ ID пустой")
+            showAlert(message: "Ошибка: ID записи пустой")
+            return
+        }
+        
+        // Открываем форму детальной информации (аналогично openNagradaFromGrid)
+        openAwardDetail(isNew: false, nagrada: selectedNagrada)
     }
     
     func openAwardDetail(isNew: Bool, nagrada: Nagrada? = nil) {
-        // Create window programmatically if storyboard doesn't have it
-        let windowController = AwardDetailWindowController()
-        awardDetailWindowController = windowController
-        windowController.isNew = isNew
+        // Проверяем, не открыта ли уже карточка и не редактируется ли она
+        if let existingController = awardDetailWindowController,
+           let existingWindow = existingController.window,
+           existingWindow.isVisible,
+           existingController.edited {
+            showAlert(message: "Карточка уже открыта и редактируется")
+            return
+        }
         
         // Если передан объект nagrada, загружаем актуальные данные из базы
+        var nagradaToShow: Nagrada? = nagrada
         if let nagrada = nagrada {
-            // Загружаем данные из базы, чтобы получить актуальные значения (включая drugie_ist)
-            if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(nagrada.id.replacingOccurrences(of: "'", with: "''"))'"),
+            let escapedId = nagrada.id.replacingOccurrences(of: "'", with: "''")
+            print("🔍 Загружаем данные из базы для id = \(escapedId)")
+            
+            if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(escapedId)'"),
                let firstRow = results.first {
                 // Создаем новый объект Nagrada из актуальных данных базы
-                let updatedNagrada = Nagrada(from: firstRow)
-                windowController.nagrada = updatedNagrada
+                nagradaToShow = Nagrada(from: firstRow)
+                print("✅ Данные загружены из базы")
             } else {
-                windowController.nagrada = nagrada
+                print("⚠️ Не удалось загрузить данные из базы, используем переданный объект")
             }
         }
+        
+        guard let finalNagrada = nagradaToShow else {
+            print("❌ nagrada is nil")
+            showAlert(message: "Ошибка: не удалось загрузить данные записи")
+            return
+        }
+        
+        // Создаем новое окно (как в VB.NET: Dim f As New FormNagradaNew)
+        let windowController = AwardDetailWindowController()
+        
+        // Создаем окно программно, если его нет
+        if windowController.window == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 680, height: 800),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Редактор наград"
+            window.center()
+            windowController.window = window
+        }
+        
+        awardDetailWindowController = windowController
+        
+        // Устанавливаем параметры (как в VB.NET: f.edited = False, f.its_new = False)
+        windowController.isNew = isNew
+        windowController.edited = false
+        windowController.nagrada = finalNagrada
+        
+        print("✅ Окно создано, загружаем содержимое...")
+        
+        // Загружаем окно, чтобы вызвать windowDidLoad
+        // Если окно создано программно, создаем содержимое
+        if windowController.window?.contentView == nil || (windowController.window?.contentView?.subviews.isEmpty ?? true) {
+            windowController.createWindowContent()
+        }
+        
+        // Загружаем окно (вызовет windowDidLoad)
+        windowController.loadWindow()
+        
+        // Убеждаемся, что fillCombos и fillForm вызываются после загрузки окна
+        // Вызываем явно, если windowDidLoad еще не отработал
+        DispatchQueue.main.async {
+            windowController.fillCombos()
+            windowController.setupNagradaCombo()
+            windowController.fillForm(from: finalNagrada)
+            windowController.setStatus(blocked: !isNew) // blocked = true для существующих записей
+        }
+        
+        // Показываем окно (как в VB.NET: f.Show())
         windowController.showWindow(nil)
+        windowController.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        print("✅ Окно должно быть видимо")
     }
     
     @objc func textSearchEnterPressed(_ sender: NSTextField) {
@@ -780,18 +848,6 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         }
     }
     
-    @objc @IBAction func buttonSetOperatorNameClicked(_ sender: Any) {
-        let name = textOperatorName?.stringValue ?? ""
-        if name.isEmpty {
-            showAlert(message: "Введите новое имя оператора")
-            return
-        }
-        
-        DatabaseManager.shared.setUserName(name)
-        window?.title = "Рабочее место оператора: \(name)"
-        showAlert(message: "Имя оператора изменено")
-    }
-    
     @objc @IBAction func buttonChangeDrugieIstClicked(_ sender: Any) {
         guard let grid = grid else { return }
         
@@ -867,34 +923,287 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         }
     }
     
-    @objc @IBAction func buttonMakeClicked(_ sender: Any) {
-        let checkRules = checkRules?.state == .on
-        let checkOpredeleniya = checkOpredeleniya?.state == .on
-        
-        WordExporter.exportToWord(
-            checkRules: checkRules,
-            checkOpredeleniya: checkOpredeleniya
-        ) { [weak self] status, progress in
-            DispatchQueue.main.async {
-                self?.labelStatus?.stringValue = status
-                self?.progressBar?.doubleValue = progress
-            }
-        }
-    }
-    
     func showAlert(message: String) {
         let alert = NSAlert()
         alert.messageText = message
         alert.runModal()
     }
+    
+    // MARK: - Number Conditions Actions
+    
+    @objc @IBAction func buttonLoadNomerCondClicked(_ sender: Any) {
+        loadNomerConditions()
+    }
+    
+    @objc @IBAction func buttonSaveNomerCondClicked(_ sender: Any) {
+        saveNomerConditions()
+    }
+    
+    @objc @IBAction func buttonAddNomerCondRowClicked(_ sender: Any) {
+        // Добавляем новую пустую строку (как в DataGridView)
+        // Всегда добавляем только одну строку, независимо от того, пуста таблица или нет
+        let newRowIndex = nomerConditions.count
+        nomerConditions.append(NumberCondition(type: 0, stepen: 0, maxNomer: 0))
+        
+        // Обновляем таблицу
+        guard let grid = gridNomerConditions else { return }
+        grid.reloadData()
+        
+        // Выделяем новую строку после обновления
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Проверяем, что строка все еще существует
+            if newRowIndex < self.nomerConditions.count {
+                grid.selectRowIndexes(IndexSet(integer: newRowIndex), byExtendingSelection: false)
+                grid.scrollRowToVisible(newRowIndex)
+                // Устанавливаем фокус на первую ячейку новой строки и начинаем редактирование
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    grid.editColumn(0, row: newRowIndex, with: nil, select: true)
+                }
+            }
+        }
+    }
+    
+    @objc @IBAction func buttonDeleteNomerCondRowClicked(_ sender: Any) {
+        guard let grid = gridNomerConditions else { return }
+        
+        // Получаем выбранные строки (может быть несколько)
+        let selectedIndexes = grid.selectedRowIndexes
+        
+        // Если ничего не выбрано, проверяем clickedRow
+        if selectedIndexes.isEmpty {
+            let clickedRow = grid.clickedRow
+            if clickedRow >= 0 && clickedRow < nomerConditions.count {
+                // Удаляем строку по которой кликнули
+                nomerConditions.remove(at: clickedRow)
+                grid.reloadData()
+                
+                // Выделяем следующую строку или предыдущую, если удалили последнюю
+                if nomerConditions.count > 0 {
+                    let newSelection = min(clickedRow, nomerConditions.count - 1)
+                    DispatchQueue.main.async {
+                        grid.selectRowIndexes(IndexSet(integer: newSelection), byExtendingSelection: false)
+                        grid.scrollRowToVisible(newSelection)
+                    }
+                } else {
+                    grid.deselectAll(nil)
+                }
+            } else {
+                showAlert(message: "Выберите строку для удаления")
+            }
+            return
+        }
+        
+        // Удаляем все выбранные строки (начиная с последней, чтобы индексы не сбились)
+        let sortedIndexes = selectedIndexes.sorted(by: >) // Сортируем по убыванию
+        for index in sortedIndexes {
+            if index >= 0 && index < nomerConditions.count {
+                nomerConditions.remove(at: index)
+            }
+        }
+        
+        // Обновляем таблицу
+        grid.reloadData()
+        
+        // Выделяем следующую строку или предыдущую, если удалили последнюю
+        if nomerConditions.count > 0 {
+            let firstDeleted = sortedIndexes.last ?? 0
+            let newSelection = min(firstDeleted, nomerConditions.count - 1)
+            DispatchQueue.main.async {
+                grid.selectRowIndexes(IndexSet(integer: newSelection), byExtendingSelection: false)
+                grid.scrollRowToVisible(newSelection)
+            }
+        } else {
+            // Если таблица стала пустой, снимаем выделение
+            grid.deselectAll(nil)
+        }
+    }
+    
+    @objc func gridNomerConditionsDoubleClicked(_ sender: NSTableView) {
+        // При двойном клике начинаем редактирование ячейки (как в DataGridView)
+        let clickedRow = sender.clickedRow
+        let clickedColumn = sender.clickedColumn
+        
+        // Не добавляем строки автоматически - только через кнопку "Добавить строку"
+        if clickedRow >= 0 && clickedColumn >= 0 && clickedRow < nomerConditions.count {
+            // Начинаем редактирование ячейки
+            DispatchQueue.main.async {
+                sender.editColumn(clickedColumn, row: clickedRow, with: nil, select: true)
+            }
+        }
+    }
+    
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let tableView = notification.object as? NSTableView else { return }
+        
+        if tableView == gridNomerConditions {
+            // При выборе строки в таблице условий автоматически начинаем редактирование первой ячейки (как в DataGridView)
+            let selectedRow = tableView.selectedRow
+            if selectedRow >= 0 && selectedRow < nomerConditions.count {
+                // Небольшая задержка для корректной работы
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    if tableView.selectedRow == selectedRow {
+                        tableView.editColumn(0, row: selectedRow, with: nil, select: true)
+                    }
+                }
+            }
+        } else if tableView == listGroup {
+            // Обработка для listGroup (существующий код)
+            let selectedRow = tableView.selectedRow
+            print("🔍 Выбрана строка в listGroup: \(selectedRow)")
+            
+            if selectedRow >= 0 && selectedRow < groupListItems.count {
+                let selectedItem = groupListItems[selectedRow]
+                print("🔍 Выбранный элемент: \(selectedItem)")
+                
+                if selectedItem == "Все" {
+                    // Если выбрано "Все", показываем все записи
+                    selectedGroupValue = nil
+                    print("✅ Выбрано 'Все', загружаем все записи")
+                    loadAllRecords()
+                } else {
+                    // Извлекаем значение из формата "значение (количество)" или "(количество)"
+                    let actualValue: String
+                    if selectedItem.hasPrefix("(") && selectedItem.hasSuffix(")") {
+                        // Формат "(количество)" - это пустое значение
+                        actualValue = ""
+                        print("✅ Извлечено пустое значение из '\(selectedItem)'")
+                    } else {
+                        // Формат "значение (количество)" - извлекаем значение до скобки
+                        if let range = selectedItem.range(of: " (") {
+                            actualValue = String(selectedItem[..<range.lowerBound])
+                            print("✅ Извлечено значение '\(actualValue)' из '\(selectedItem)'")
+                        } else {
+                            actualValue = selectedItem
+                            print("✅ Используется значение как есть: '\(actualValue)'")
+                        }
+                    }
+                    
+                    selectedGroupValue = actualValue
+                    print("🔍 Установлено selectedGroupValue = '\(actualValue)'")
+                    filterTableByGroup()
+                }
+            }
+        }
+    }
+    
+    func loadNomerConditions() {
+        // Заполняем таблицу данными из базы - находим максимальные номера для каждой комбинации тип/степень
+        // Сначала пытаемся загрузить из таблицы "Условия на номера"
+        if let results = DatabaseManager.shared.executeQuery("SELECT * FROM \"Условия на номера\"") {
+            nomerConditions = []
+            for row in results {
+                // Пытаемся загрузить с разными вариантами названий колонок
+                let type: Int
+                let stepen: Int
+                let maxNomer: Int
+                
+                if let t = (row["type"] as? Int64).map({ Int($0) }) {
+                    type = t
+                } else if let t = (row["nagrada"] as? Int64).map({ Int($0) }) {
+                    type = t
+                } else {
+                    type = 0
+                }
+                
+                if let s = (row["stepen"] as? Int64).map({ Int($0) }) {
+                    stepen = s
+                } else {
+                    stepen = 0
+                }
+                
+                if let m = (row["max_nomer"] as? Int64).map({ Int($0) }) {
+                    maxNomer = m
+                } else if let m = (row["nomer"] as? Int64).map({ Int($0) }) {
+                    maxNomer = m
+                } else {
+                    maxNomer = 0
+                }
+                
+                nomerConditions.append(NumberCondition(
+                    type: type,
+                    stepen: stepen,
+                    maxNomer: maxNomer
+                ))
+            }
+            print("✅ Загружено \(nomerConditions.count) условий из таблицы 'Условия на номера'")
+        } else {
+            // Если таблица пуста или не существует, заполняем из основной таблицы nagrada
+            if let results = DatabaseManager.shared.executeQuery("""
+                SELECT nagrada, stepen, MAX(nomer) as max_nomer 
+                FROM nagrada 
+                WHERE nagrada IS NOT NULL AND stepen IS NOT NULL AND nomer IS NOT NULL 
+                GROUP BY nagrada, stepen 
+                ORDER BY nagrada, stepen
+                """) {
+                nomerConditions = []
+                for row in results {
+                    let type = (row["nagrada"] as? Int64).map { Int($0) } ?? 0
+                    let stepen = (row["stepen"] as? Int64).map { Int($0) } ?? 0
+                    let maxNomer = (row["max_nomer"] as? Int64).map { Int($0) } ?? 0
+                    
+                    nomerConditions.append(NumberCondition(
+                        type: type,
+                        stepen: stepen,
+                        maxNomer: maxNomer
+                    ))
+                }
+                print("✅ Заполнено \(nomerConditions.count) условий из таблицы nagrada")
+            } else {
+                nomerConditions = []
+                print("⚠️ Не удалось загрузить данные из базы")
+            }
+        }
+        
+        gridNomerConditions?.reloadData()
+        showAlert(message: "Заполнено условий: \(nomerConditions.count)")
+    }
+    
+    func saveNomerConditions() {
+        // Сохраняем в базу данных
+        // Сначала удаляем все существующие записи
+        _ = DatabaseManager.shared.executeUpdate("DELETE FROM \"Условия на номера\"")
+        
+        // Затем вставляем новые
+        var savedCount = 0
+        for condition in nomerConditions {
+            // Пытаемся вставить с колонками type, stepen, max_nomer
+            // Если таблица имеет другую структуру, используем альтернативный вариант
+            let query = """
+            INSERT INTO "Условия на номера" (type, stepen, max_nomer)
+            VALUES (\(condition.type), \(condition.stepen), \(condition.maxNomer))
+            """
+            if DatabaseManager.shared.executeUpdate(query) {
+                savedCount += 1
+            } else {
+                // Альтернативный вариант - если таблица имеет другую структуру
+                // Пытаемся использовать существующие колонки
+                let altQuery = """
+                INSERT INTO "Условия на номера" (nagrada, stepen, nomer)
+                VALUES (\(condition.type), \(condition.stepen), \(condition.maxNomer))
+                """
+                if DatabaseManager.shared.executeUpdate(altQuery) {
+                    savedCount += 1
+                }
+            }
+        }
+        
+        if savedCount == nomerConditions.count {
+            showAlert(message: "Сохранено условий: \(savedCount)")
+        } else {
+            showAlert(message: "Ошибка: сохранено \(savedCount) из \(nomerConditions.count)")
+        }
+    }
 }
 
-extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
+extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTextFieldDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
         if tableView == listGroup {
             return groupListItems.count
         } else if tableView == grid {
             return filteredNagradaList.count
+        } else if tableView == gridNomerConditions {
+            // Показываем только реальные строки, без дополнительных пустых
+            return nomerConditions.count
         }
         return 0
     }
@@ -1007,13 +1316,94 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
             return cell
         }
         
+        // Обработка gridNomerConditions (таблица условий на номера) - DataGridView-подобная таблица
+        if tableView == gridNomerConditions {
+            // Не добавляем строки автоматически - только через кнопку "Добавить строку"
+            guard let column = tableColumn, row < nomerConditions.count else { return nil }
+            
+            let condition = nomerConditions[row]
+            let cellIdentifier = column.identifier.rawValue
+            
+            // Пытаемся переиспользовать существующую ячейку
+            var cell = tableView.makeView(withIdentifier: column.identifier, owner: self) as? NSTableCellView
+            
+            if cell == nil {
+                // Создаем новую ячейку с редактируемым полем
+                cell = NSTableCellView()
+                cell?.identifier = column.identifier
+                
+                let textField = NSTextField()
+                textField.isEditable = true
+                textField.isBordered = true
+                textField.bezelStyle = .squareBezel
+                textField.backgroundColor = .textBackgroundColor
+                textField.font = NSFont.systemFont(ofSize: 13)
+                textField.isSelectable = true
+                textField.drawsBackground = true
+                textField.focusRingType = .exterior
+                textField.controlSize = .regular
+                
+                // Обработка изменений через делегат
+                textField.delegate = self
+                
+                cell?.textField = textField
+                cell?.addSubview(textField)
+                textField.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 4),
+                    textField.trailingAnchor.constraint(equalTo: cell!.trailingAnchor, constant: -4),
+                    textField.topAnchor.constraint(equalTo: cell!.topAnchor, constant: 2),
+                    textField.bottomAnchor.constraint(equalTo: cell!.bottomAnchor, constant: -2)
+                ])
+            }
+            
+            // Убеждаемся, что textField редактируемый и настроен правильно
+            cell?.textField?.isEditable = true
+            cell?.textField?.delegate = self
+            cell?.textField?.tag = row * 1000 + columnIndex(for: cellIdentifier)
+            
+            // Заполняем данными
+            switch cellIdentifier {
+            case "Type":
+                // Тип награды: 0 - крест, 1 - медаль
+                let typeNames = ["Крест", "Медаль"]
+                let typeName = condition.type >= 0 && condition.type < typeNames.count ? typeNames[condition.type] : String(condition.type)
+                cell?.textField?.stringValue = typeName
+            case "Stepen":
+                cell?.textField?.stringValue = condition.stepen > 0 ? String(condition.stepen) : ""
+            case "MaxNomer":
+                cell?.textField?.stringValue = condition.maxNomer > 0 ? String(condition.maxNomer) : ""
+            default:
+                cell?.textField?.stringValue = ""
+            }
+            
+            return cell
+        }
+        
         return nil
+    }
+    
+    func columnIndex(for identifier: String) -> Int {
+        guard let grid = gridNomerConditions else { return 0 }
+        for (index, column) in grid.tableColumns.enumerated() {
+            if column.identifier.rawValue == identifier {
+                return index
+            }
+        }
+        return 0
+    }
+    
+    func tableView(_ tableView: NSTableView, didClick tableColumn: NSTableColumn) {
+        // Обработка клика по колонке - не требуется для редактирования
     }
     
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
         if tableView == grid {
             // Фиксированная высота для основной таблицы
             return 28.0
+        } else if tableView == gridNomerConditions {
+            // Фиксированная высота для таблицы условий
+            return 24.0
         } else if tableView == listGroup {
             // Автоматическая высота для списка групп на основе содержимого
             guard row < groupListItems.count else {
@@ -1040,7 +1430,7 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
     }
     
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-        // Разрешаем выбор строки
+        // Разрешаем выбор строки для всех таблиц
         return true
     }
     
@@ -1049,46 +1439,69 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate {
         return nil
     }
     
-    func tableViewSelectionDidChange(_ notification: Notification) {
-        guard let tableView = notification.object as? NSTableView else { return }
-        
-        if tableView == listGroup {
-            let selectedRow = tableView.selectedRow
-            print("🔍 Выбрана строка в listGroup: \(selectedRow)")
-            
-            if selectedRow >= 0 && selectedRow < groupListItems.count {
-                let selectedItem = groupListItems[selectedRow]
-                print("🔍 Выбранный элемент: \(selectedItem)")
-                
-                if selectedItem == "Все" {
-                    // Если выбрано "Все", показываем все записи
-                    selectedGroupValue = nil
-                    print("✅ Выбрано 'Все', загружаем все записи")
-                    loadAllRecords()
-                } else {
-                    // Извлекаем значение из формата "значение (количество)" или "(количество)"
-                    let actualValue: String
-                    if selectedItem.hasPrefix("(") && selectedItem.hasSuffix(")") {
-                        // Формат "(количество)" - это пустое значение
-                        actualValue = ""
-                        print("✅ Извлечено пустое значение из '\(selectedItem)'")
-                    } else {
-                        // Формат "значение (количество)" - извлекаем значение до скобки
-                        if let range = selectedItem.range(of: " (") {
-                            actualValue = String(selectedItem[..<range.lowerBound])
-                            print("✅ Извлечено значение '\(actualValue)' из '\(selectedItem)'")
-                        } else {
-                            actualValue = selectedItem
-                            print("✅ Используется значение как есть: '\(actualValue)'")
-                        }
-                    }
-                    
-                    selectedGroupValue = actualValue
-                    print("🔍 Установлено selectedGroupValue = '\(actualValue)'")
-                    filterTableByGroup()
-                }
-            }
+    // MARK: - NSTableViewDelegate для редактирования
+    
+    func tableView(_ tableView: NSTableView, shouldEdit tableColumn: NSTableColumn?, row: Int) -> Bool {
+        if tableView == gridNomerConditions {
+            return true // Разрешаем редактирование всех ячеек
         }
+        return false
+    }
+    
+    // MARK: - NSTextFieldDelegate для обработки изменений
+    
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard let textField = obj.object as? NSTextField,
+              let tableView = gridNomerConditions else {
+            return
+        }
+        
+        // Извлекаем строку и колонку из tag
+        let tag = textField.tag
+        let row = tag / 1000
+        let colIndex = tag % 1000
+        
+        // Если строка выходит за пределы, добавляем новую
+        if row >= nomerConditions.count {
+            nomerConditions.append(NumberCondition(type: 0, stepen: 0, maxNomer: 0))
+        }
+        
+        guard row >= 0 && row < nomerConditions.count,
+              colIndex >= 0 && colIndex < tableView.tableColumns.count else {
+            return
+        }
+        
+        let column = tableView.tableColumns[colIndex]
+        let columnId = column.identifier.rawValue
+        let newValue = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        switch columnId {
+        case "Type":
+            // Преобразуем название типа обратно в число
+            let typeNames = ["Крест", "Медаль"]
+            if let typeIndex = typeNames.firstIndex(of: newValue) {
+                nomerConditions[row].type = typeIndex
+            } else if let typeRaw = Int(newValue), typeRaw >= 0 && typeRaw <= 1 {
+                nomerConditions[row].type = typeRaw
+            }
+        case "Stepen":
+            if let newStepen = Int(newValue) {
+                nomerConditions[row].stepen = newStepen
+            } else if newValue.isEmpty {
+                nomerConditions[row].stepen = 0
+            }
+        case "MaxNomer":
+            if let newMaxNomer = Int(newValue) {
+                nomerConditions[row].maxNomer = newMaxNomer
+            } else if newValue.isEmpty {
+                nomerConditions[row].maxNomer = 0
+            }
+        default:
+            break
+        }
+        
+        // Автоматическое добавление новой строки при заполнении последней строки отключено
+        // Пользователь должен использовать кнопку "Добавить строку"
     }
 }
 
