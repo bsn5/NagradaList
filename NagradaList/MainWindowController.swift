@@ -6,6 +6,10 @@
 //
 
 import Cocoa
+import SQLite3
+
+// Константа для SQLite - указывает, что строка должна быть скопирована
+private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 class MainWindowController: NSWindowController, NSComboBoxDelegate {
     
@@ -50,6 +54,18 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     @IBOutlet weak var textUnloadStat: NSTextView!
     @IBOutlet weak var buttonUnloadData: NSButton!
     @IBOutlet weak var textUnloadLog: NSTextView!
+    
+    // Tab 7: Service
+    @IBOutlet weak var textOperatorName: NSTextField!
+    @IBOutlet weak var buttonSetOperatorName: NSButton!
+    @IBOutlet weak var textCurrentOperatorName: NSTextField!
+    @IBOutlet weak var textDbPath: NSTextField!
+    @IBOutlet weak var buttonChangeDbPath: NSButton!
+    @IBOutlet var requiredFieldsCheckboxes: [NSButton]!
+    @IBOutlet weak var buttonSaveRequiredFields: NSButton!
+    @IBOutlet weak var buttonLoadRequiredFields: NSButton!
+    @IBOutlet weak var buttonSelectAllRequiredFields: NSButton!
+    @IBOutlet weak var buttonDeselectAllRequiredFields: NSButton!
     
     var nagradaList: [Nagrada] = []
     var filteredNagradaList: [Nagrada] = []
@@ -1050,6 +1066,563 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         }
     }
     
+    // MARK: - Unload Actions
+    
+    @objc @IBAction func buttonEndedClicked(_ sender: Any) {
+        // Помечаем все записи как завершенные
+        updateRecordsStatus(ended: true)
+    }
+    
+    @objc @IBAction func buttonNotEndedClicked(_ sender: Any) {
+        // Помечаем все записи как не завершенные
+        updateRecordsStatus(ended: false)
+    }
+    
+    @objc @IBAction func buttonUnloadDataClicked(_ sender: Any) {
+        // Открываем диалог сохранения файла
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = []
+        savePanel.allowsOtherFileTypes = true
+        savePanel.nameFieldStringValue = "nagrada_export_\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .none).replacingOccurrences(of: "/", with: "_")).db"
+        savePanel.title = "Сохранить базу данных"
+        savePanel.prompt = "Сохранить"
+        savePanel.message = "Выберите место для сохранения выгруженной базы данных"
+        savePanel.canCreateDirectories = true
+        
+        savePanel.begin { [weak self] result in
+            guard let self = self else { return }
+            
+            if result == .OK, let url = savePanel.url {
+                self.unloadData(to: url)
+            }
+        }
+    }
+    
+    func updateRecordsStatus(ended: Bool) {
+        // Обновляем статус записей в базе данных
+        // Используем поле sluzh_otm для хранения статуса
+        let statusValue = ended ? "Завершено" : "Не завершено"
+        let escapedStatus = statusValue.replacingOccurrences(of: "'", with: "''")
+        
+        // Обновляем все записи без статуса или с пустым статусом
+        let query = "UPDATE nagrada SET sluzh_otm = '\(escapedStatus)', data_izm = datetime('now') WHERE sluzh_otm IS NULL OR sluzh_otm = ''"
+        
+        if DatabaseManager.shared.executeUpdate(query) {
+            // Подсчитываем количество обновленных записей
+            if let countResults = DatabaseManager.shared.executeQuery("SELECT COUNT(*) as count FROM nagrada WHERE sluzh_otm = '\(escapedStatus)'"),
+               let first = countResults.first,
+               let count = (first["count"] as? Int64).map({ Int($0) }) {
+                // Обновляем статистику
+                updateUnloadStatistics()
+                textCheckStatus?.stringValue = "Статус обновлен: \(statusValue) (\(count) записей)"
+                addToUnloadLog("Обновлен статус записей: \(statusValue) (\(count) записей)")
+            } else {
+                updateUnloadStatistics()
+                textCheckStatus?.stringValue = "Статус обновлен: \(statusValue)"
+                addToUnloadLog("Обновлен статус записей: \(statusValue)")
+            }
+        } else {
+            showAlert(message: "Ошибка при обновлении статуса")
+        }
+    }
+    
+    func updateUnloadStatistics() {
+        // Подсчитываем статистику
+        guard let results = DatabaseManager.shared.executeQuery("""
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN sluzh_otm = 'Завершено' THEN 1 ELSE 0 END) as ended,
+                SUM(CASE WHEN sluzh_otm = 'Не завершено' THEN 1 ELSE 0 END) as not_ended,
+                SUM(CASE WHEN sluzh_otm IS NULL OR sluzh_otm = '' THEN 1 ELSE 0 END) as no_status
+            FROM nagrada
+            """) else {
+            return
+        }
+        
+        if let first = results.first {
+            let total = (first["total"] as? Int64).map { Int($0) } ?? 0
+            let ended = (first["ended"] as? Int64).map { Int($0) } ?? 0
+            let notEnded = (first["not_ended"] as? Int64).map { Int($0) } ?? 0
+            let noStatus = (first["no_status"] as? Int64).map { Int($0) } ?? 0
+            
+            var statText = "Статистика выгрузки:\n"
+            statText += "Всего записей: \(total)\n"
+            statText += "Завершено: \(ended)\n"
+            statText += "Не завершено: \(notEnded)\n"
+            statText += "Без статуса: \(noStatus)\n"
+            
+            textUnloadStat?.string = statText
+        }
+    }
+    
+    func unloadData(to url: URL) {
+        // Выгружаем данные в новую базу данных SQLite
+        let fileManager = FileManager.default
+        let destinationPath = url.path
+        
+        // Удаляем файл, если он уже существует
+        if fileManager.fileExists(atPath: destinationPath) {
+            try? fileManager.removeItem(atPath: destinationPath)
+        }
+        
+        // Создаем новую базу данных
+        var exportDb: OpaquePointer?
+        let result = sqlite3_open(destinationPath, &exportDb)
+        
+        guard result == SQLITE_OK, let db = exportDb else {
+            showAlert(message: "Ошибка при создании базы данных для выгрузки")
+            return
+        }
+        
+        // Создаем таблицу nagrada в новой базе
+        let createTableQuery = """
+        CREATE TABLE IF NOT EXISTS nagrada (
+            id TEXT PRIMARY KEY,
+            фамилия TEXT,
+            имя TEXT,
+            отчество TEXT,
+            komp TEXT,
+            nagrada INTEGER,
+            nomer INTEGER,
+            stepen INTEGER,
+            chast TEXT,
+            podrazdel1 TEXT,
+            podrazdel2 TEXT,
+            chin TEXT,
+            dolzhnost TEXT,
+            prikaz TEXT,
+            data_prik TEXT,
+            nomer_prik TEXT,
+            otnosh TEXT,
+            data_otnosh TEXT,
+            nomer_otnosh TEXT,
+            arxiv TEXT,
+            fond TEXT,
+            opis TEXT,
+            delo TEXT,
+            list TEXT,
+            drugie_ist TEXT,
+            otlichie TEXT,
+            komment TEXT,
+            sluzh_otm TEXT,
+            data_sozd TEXT,
+            data_izm TEXT,
+            who_sozd TEXT,
+            who_red TEXT,
+            Деревня TEXT,
+            Уезд TEXT,
+            Губерния TEXT
+        )
+        """
+        
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, createTableQuery, -1, &statement, nil) == SQLITE_OK,
+              sqlite3_step(statement) == SQLITE_DONE else {
+            let errorMsg = String(cString: sqlite3_errmsg(db))
+            sqlite3_finalize(statement)
+            sqlite3_close(db)
+            showAlert(message: "Ошибка при создании таблицы: \(errorMsg)")
+            return
+        }
+        sqlite3_finalize(statement)
+        
+        // Получаем все записи из исходной базы
+        guard let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada ORDER BY sluzh_otm, фамилия, имя") else {
+            sqlite3_close(db)
+            showAlert(message: "Ошибка при загрузке данных из базы")
+            return
+        }
+        
+        // Вставляем записи в новую базу
+        let insertQuery = """
+        INSERT INTO nagrada (
+            id, фамилия, имя, отчество, komp, nagrada, nomer, stepen,
+            chast, podrazdel1, podrazdel2, chin, dolzhnost, prikaz, data_prik, nomer_prik,
+            otnosh, data_otnosh, nomer_otnosh, arxiv, fond, opis, delo, list,
+            drugie_ist, otlichie, komment, sluzh_otm, data_sozd, data_izm,
+            who_sozd, who_red, Деревня, Уезд, Губерния
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        
+        var insertedCount = 0
+        var endedCount = 0
+        var notEndedCount = 0
+        var noStatusCount = 0
+        var logText = "Выгрузка данных\n"
+        
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        logText += "Дата: \(formatter.string(from: Date()))\n"
+        logText += "Файл: \(url.lastPathComponent)\n"
+        logText += String(repeating: "=", count: 50) + "\n\n"
+        
+        for row in results {
+            guard sqlite3_prepare_v2(db, insertQuery, -1, &statement, nil) == SQLITE_OK else {
+                let errorMsg = String(cString: sqlite3_errmsg(db))
+                print("❌ Ошибка подготовки запроса: \(errorMsg)")
+                continue
+            }
+            
+            // Биндим параметры в правильном порядке
+            var paramIndex: Int32 = 1
+            
+            // id (1)
+            let id = (row["id"] as? String) ?? ""
+            sqlite3_bind_text(statement, paramIndex, id, -1, SQLITE_TRANSIENT)
+            paramIndex += 1
+            
+            // фамилия, имя, отчество, komp (2-5)
+            let textFields1 = ["фамилия", "имя", "отчество", "komp"]
+            for field in textFields1 {
+                if let value = row[field] as? String {
+                    sqlite3_bind_text(statement, paramIndex, value, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(statement, paramIndex)
+                }
+                paramIndex += 1
+            }
+            
+            // nagrada, nomer, stepen (6-8)
+            if let nagrada = (row["nagrada"] as? Int64) {
+                sqlite3_bind_int64(statement, paramIndex, nagrada)
+            } else {
+                sqlite3_bind_null(statement, paramIndex)
+            }
+            paramIndex += 1
+            
+            if let nomer = (row["nomer"] as? Int64) {
+                sqlite3_bind_int64(statement, paramIndex, nomer)
+            } else {
+                sqlite3_bind_null(statement, paramIndex)
+            }
+            paramIndex += 1
+            
+            if let stepen = (row["stepen"] as? Int64) {
+                sqlite3_bind_int64(statement, paramIndex, stepen)
+            } else {
+                sqlite3_bind_null(statement, paramIndex)
+            }
+            paramIndex += 1
+            
+            // Остальные текстовые поля (9-35)
+            let textFields2 = ["chast", "podrazdel1", "podrazdel2", "chin", "dolzhnost", "prikaz", "data_prik", "nomer_prik",
+                              "otnosh", "data_otnosh", "nomer_otnosh", "arxiv", "fond", "opis", "delo", "list",
+                              "drugie_ist", "otlichie", "komment", "sluzh_otm", "data_sozd", "data_izm",
+                              "who_sozd", "who_red", "Деревня", "Уезд", "Губерния"]
+            
+            for field in textFields2 {
+                if let value = row[field] as? String {
+                    sqlite3_bind_text(statement, paramIndex, value, -1, SQLITE_TRANSIENT)
+                } else {
+                    sqlite3_bind_null(statement, paramIndex)
+                }
+                paramIndex += 1
+            }
+            
+            if sqlite3_step(statement) == SQLITE_DONE {
+                insertedCount += 1
+                
+                let status = (row["sluzh_otm"] as? String) ?? ""
+                if status == "Завершено" {
+                    endedCount += 1
+                } else if status == "Не завершено" {
+                    notEndedCount += 1
+                } else {
+                    noStatusCount += 1
+                }
+                
+                // Добавляем в лог каждую 10-ю запись
+                if insertedCount % 10 == 0 {
+                    let фамилия = (row["фамилия"] as? String) ?? ""
+                    let имя = (row["имя"] as? String) ?? ""
+                    let отчество = (row["отчество"] as? String) ?? ""
+                    let fullName = "\(фамилия) \(имя) \(отчество)".trimmingCharacters(in: .whitespaces)
+                    logText += "Обработано: \(insertedCount) записей... (последняя: \(fullName))\n"
+                }
+            } else {
+                let errorMsg = String(cString: sqlite3_errmsg(db))
+                print("❌ Ошибка вставки записи: \(errorMsg)")
+            }
+            
+            sqlite3_finalize(statement)
+        }
+        
+        sqlite3_close(db)
+        
+        // Завершаем лог
+        logText += "\n" + String(repeating: "=", count: 50) + "\n"
+        logText += "Итого:\n"
+        logText += "Всего записей: \(insertedCount)\n"
+        logText += "Завершено: \(endedCount)\n"
+        logText += "Не завершено: \(notEndedCount)\n"
+        logText += "Без статуса: \(noStatusCount)\n"
+        logText += "\nФайл сохранен: \(url.path)\n"
+        
+        textUnloadLog?.string = logText
+        updateUnloadStatistics()
+        
+        // Прокручиваем лог вниз
+        if let scrollView = textUnloadLog?.enclosingScrollView {
+            scrollView.scrollToEndOfDocument(nil)
+        }
+        
+        showAlert(message: "Выгрузка завершена. Сохранено записей: \(insertedCount)\nФайл: \(url.lastPathComponent)")
+    }
+    
+    func addToUnloadLog(_ message: String) {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        let timestamp = formatter.string(from: Date())
+        let logMessage = "[\(timestamp)] \(message)\n"
+        
+        if let currentText = textUnloadLog?.string {
+            textUnloadLog?.string = currentText + logMessage
+        } else {
+            textUnloadLog?.string = logMessage
+        }
+        
+        // Прокручиваем вниз
+        if let scrollView = textUnloadLog?.enclosingScrollView {
+            scrollView.scrollToEndOfDocument(nil)
+        }
+    }
+    
+    func loadUnloadData() {
+        // Загружаем данные для вкладки "Сдача папки"
+        updateUnloadStatistics()
+        textCheckStatus?.stringValue = ""
+        addToUnloadLog("Вкладка 'Сдача папки' открыта")
+    }
+    
+    // MARK: - Service Actions
+    
+    @objc @IBAction func buttonSetOperatorNameClicked(_ sender: Any) {
+        guard let operatorName = textOperatorName?.stringValue, !operatorName.trimmingCharacters(in: .whitespaces).isEmpty else {
+            showAlert(message: "Введите имя оператора")
+            return
+        }
+        
+        let trimmedName = operatorName.trimmingCharacters(in: .whitespaces)
+        DatabaseManager.shared.setUserName(trimmedName)
+        
+        // Обновляем отображение
+        textCurrentOperatorName?.stringValue = trimmedName
+        window?.title = "Рабочее место оператора: \(trimmedName)"
+        
+        showAlert(message: "Имя оператора установлено: \(trimmedName)")
+    }
+    
+    func loadServiceData() {
+        // Загружаем данные для вкладки "Служебная"
+        let currentName = DatabaseManager.shared.getUserName()
+        textOperatorName?.stringValue = currentName
+        textCurrentOperatorName?.stringValue = currentName
+        
+        // Обновляем путь к базе данных
+        textDbPath?.stringValue = DatabaseManager.shared.getDatabasePath()
+        
+        // Загружаем настройки обязательных полей
+        loadRequiredFields()
+    }
+    
+    @objc @IBAction func buttonChangeDbPathClicked(_ sender: Any) {
+        // Открываем диалог выбора файла базы данных
+        let openPanel = NSOpenPanel()
+        openPanel.allowedContentTypes = []
+        openPanel.allowsOtherFileTypes = true
+        openPanel.canChooseFiles = true
+        openPanel.canChooseDirectories = false
+        openPanel.allowsMultipleSelection = false
+        openPanel.title = "Выберите файл базы данных SQLite"
+        openPanel.message = "Выберите файл базы данных (*.db)"
+        
+        // Устанавливаем текущий путь как начальную директорию
+        let currentPath = DatabaseManager.shared.getDatabasePath()
+        if let url = URL(fileURLWithPath: currentPath).deletingLastPathComponent() as URL? {
+            openPanel.directoryURL = url
+        }
+        
+        openPanel.begin { [weak self] result in
+            guard let self = self else { return }
+            
+            if result == .OK, let url = openPanel.url {
+                // Проверяем, что файл существует и является валидной SQLite базой
+                if self.validateDatabaseFile(at: url.path) {
+                    // Закрываем текущую базу
+                    DatabaseManager.shared.closeDatabase()
+                    
+                    // Открываем новую базу
+                    if DatabaseManager.shared.openDatabase(at: url.path) {
+                        self.textDbPath?.stringValue = url.path
+                        self.showAlert(message: "База данных успешно изменена")
+                        
+                        // Обновляем заголовок окна
+                        self.window?.title = "Рабочее место оператора: \(DatabaseManager.shared.getUserName())"
+                        
+                        // Перезагружаем данные
+                        self.loadInitialData()
+                    } else {
+                        self.showAlert(message: "Ошибка при открытии базы данных")
+                    }
+                } else {
+                    self.showAlert(message: "Выбранный файл не является валидной базой данных SQLite")
+                }
+            }
+        }
+    }
+    
+    func validateDatabaseFile(at path: String) -> Bool {
+        // Проверяем, что файл существует
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: path) else {
+            return false
+        }
+        
+        // Пробуем открыть как SQLite базу
+        var testDb: OpaquePointer?
+        let result = sqlite3_open(path, &testDb)
+        
+        if result == SQLITE_OK, let db = testDb {
+            // Проверяем, что это действительно SQLite база
+            var testStatement: OpaquePointer?
+            let testQuery = "SELECT name FROM sqlite_master WHERE type='table' LIMIT 1"
+            let isValid = sqlite3_prepare_v2(db, testQuery, -1, &testStatement, nil) == SQLITE_OK
+            sqlite3_finalize(testStatement)
+            sqlite3_close(db)
+            return isValid
+        }
+        
+        return false
+    }
+    
+    @objc @IBAction func buttonSaveRequiredFieldsClicked(_ sender: Any) {
+        // Сохраняем настройки обязательных полей
+        saveRequiredFields()
+    }
+    
+    @objc @IBAction func buttonLoadRequiredFieldsClicked(_ sender: Any) {
+        // Загружаем настройки обязательных полей
+        loadRequiredFields()
+        showAlert(message: "Настройки обязательных полей загружены")
+    }
+    
+    @objc @IBAction func buttonSelectAllRequiredFieldsClicked(_ sender: Any) {
+        // Выбираем все обязательные поля
+        guard let checkboxes = requiredFieldsCheckboxes else { return }
+        for checkbox in checkboxes {
+            checkbox.state = .on
+        }
+    }
+    
+    @objc @IBAction func buttonDeselectAllRequiredFieldsClicked(_ sender: Any) {
+        // Снимаем выбор со всех обязательных полей
+        guard let checkboxes = requiredFieldsCheckboxes else { return }
+        for checkbox in checkboxes {
+            checkbox.state = .off
+        }
+    }
+    
+    func saveRequiredFields() {
+        // Сохраняем настройки обязательных полей в базу данных
+        // Создаем таблицу, если её нет
+        let createTableQuery = """
+        CREATE TABLE IF NOT EXISTS Обязательные_поля (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            поле TEXT UNIQUE NOT NULL,
+            обязательное INTEGER NOT NULL DEFAULT 1
+        )
+        """
+        
+        guard DatabaseManager.shared.executeUpdate(createTableQuery) else {
+            showAlert(message: "Ошибка при создании таблицы обязательных полей")
+            return
+        }
+        
+        // Сохраняем состояние каждого поля
+        guard let checkboxes = requiredFieldsCheckboxes else {
+            return
+        }
+        
+        var savedCount = 0
+        for checkbox in checkboxes {
+            let fieldName = checkbox.title
+            let isRequired = checkbox.state == .on ? 1 : 0
+            
+            // Используем INSERT OR REPLACE для обновления существующих записей
+            let escapedFieldName = fieldName.replacingOccurrences(of: "'", with: "''")
+            let query = """
+            INSERT OR REPLACE INTO Обязательные_поля (поле, обязательное)
+            VALUES ('\(escapedFieldName)', \(isRequired))
+            """
+            
+            if DatabaseManager.shared.executeUpdate(query) {
+                savedCount += 1
+            }
+        }
+        
+        showAlert(message: "Сохранено настроек обязательных полей: \(savedCount) из \(checkboxes.count)")
+    }
+    
+    func loadRequiredFields() {
+        // Загружаем настройки обязательных полей из базы данных
+        guard let checkboxes = requiredFieldsCheckboxes else {
+            return
+        }
+        
+        // Создаем таблицу, если её нет
+        let createTableQuery = """
+        CREATE TABLE IF NOT EXISTS Обязательные_поля (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            поле TEXT UNIQUE NOT NULL,
+            обязательное INTEGER NOT NULL DEFAULT 1
+        )
+        """
+        DatabaseManager.shared.executeUpdate(createTableQuery)
+        
+        // Загружаем настройки из базы
+        if let results = DatabaseManager.shared.executeQuery("SELECT поле, обязательное FROM Обязательные_поля") {
+            var settings: [String: Bool] = [:]
+            for row in results {
+                if let fieldName = row["поле"] as? String,
+                   let isRequired = (row["обязательное"] as? Int64).map({ $0 == 1 }) {
+                    settings[fieldName] = isRequired
+                }
+            }
+            
+            // Применяем настройки к чекбоксам
+            for checkbox in checkboxes {
+                if let isRequired = settings[checkbox.title] {
+                    checkbox.state = isRequired ? .on : .off
+                } else {
+                    // Если настройки нет в базе, используем значение по умолчанию (обязательное)
+                    checkbox.state = .on
+                }
+            }
+        } else {
+            // Если нет сохраненных настроек, все поля обязательные
+            for checkbox in checkboxes {
+                checkbox.state = .on
+            }
+        }
+    }
+    
+    func getRequiredFieldsSettings() -> [String: Bool] {
+        // Получаем текущие настройки обязательных полей из чекбоксов
+        var settings: [String: Bool] = [:]
+        
+        guard let checkboxes = requiredFieldsCheckboxes else {
+            return settings
+        }
+        
+        for checkbox in checkboxes {
+            settings[checkbox.title] = checkbox.state == .on
+        }
+        
+        return settings
+    }
+    
     // MARK: - Number Conditions Actions
     
     @objc @IBAction func buttonLoadNomerCondClicked(_ sender: Any) {
@@ -1311,6 +1884,15 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         } else {
             let errorMsg = errorMessages.isEmpty ? "" : "\nНе удалось сохранить:\n\(errorMessages.joined(separator: "\n"))"
             showAlert(message: "Ошибка: сохранено \(savedCount) из \(validConditions.count)\(errorMsg)")
+        }
+    }
+}
+
+extension MainWindowController: NSTabViewDelegate {
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        // При переключении на вкладку "Сдача папки" загружаем данные
+        if tabViewItem?.identifier as? String == "Unload" {
+            loadUnloadData()
         }
     }
 }

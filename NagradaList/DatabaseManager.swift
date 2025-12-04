@@ -12,40 +12,50 @@ class DatabaseManager {
     static let shared = DatabaseManager()
     
     private var db: OpaquePointer?
-    private let dbPath: String
+    private var dbPath: String
     
     private init() {
         let fileManager = FileManager.default
         
-        // Пробуем найти базу данных в нескольких местах
-        let projectPath = "/Users/ossuser/Documents/projects/NagradaList/base.db"
-        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dbURL = documentsPath.appendingPathComponent("base.db")
-        
-        // Приоритет: 1) Проект, 2) Documents приложения, 3) Создать новую
-        if fileManager.fileExists(atPath: projectPath) {
-            dbPath = projectPath
-            print("✅ База данных найдена в проекте: \(projectPath)")
-        } else if fileManager.fileExists(atPath: dbURL.path) {
-            dbPath = dbURL.path
-            print("✅ База данных найдена в Documents приложения: \(dbURL.path)")
+        // Сначала проверяем сохраненный путь из UserDefaults
+        if let savedPath = UserDefaults.standard.string(forKey: "DatabasePath"),
+           fileManager.fileExists(atPath: savedPath) {
+            dbPath = savedPath
+            print("✅ База данных загружена из сохраненного пути: \(savedPath)")
         } else {
-            // Пытаемся скопировать из проекта в Documents
+            // Пробуем найти базу данных в нескольких местах
+            let projectPath = "/Users/ossuser/Documents/projects/NagradaList/base.db"
+            let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let dbURL = documentsPath.appendingPathComponent("base.db")
+            
+            // Приоритет: 1) Проект, 2) Documents приложения, 3) Создать новую
             if fileManager.fileExists(atPath: projectPath) {
-                print("📋 Копирую базу данных из проекта в Documents...")
-                do {
-                    try fileManager.copyItem(at: URL(fileURLWithPath: projectPath), to: dbURL)
-                    dbPath = dbURL.path
-                    print("✅ База данных скопирована в: \(dbURL.path)")
-                } catch {
-                    print("❌ Ошибка копирования: \(error.localizedDescription)")
-                    dbPath = projectPath
-                    print("⚠️ Использую путь проекта: \(projectPath)")
-                }
-            } else {
+                dbPath = projectPath
+                print("✅ База данных найдена в проекте: \(projectPath)")
+            } else if fileManager.fileExists(atPath: dbURL.path) {
                 dbPath = dbURL.path
-                print("📝 База данных будет создана в: \(dbURL.path)")
+                print("✅ База данных найдена в Documents приложения: \(dbURL.path)")
+            } else {
+                // Пытаемся скопировать из проекта в Documents
+                if fileManager.fileExists(atPath: projectPath) {
+                    print("📋 Копирую базу данных из проекта в Documents...")
+                    do {
+                        try fileManager.copyItem(at: URL(fileURLWithPath: projectPath), to: dbURL)
+                        dbPath = dbURL.path
+                        print("✅ База данных скопирована в: \(dbURL.path)")
+                    } catch {
+                        print("❌ Ошибка копирования: \(error.localizedDescription)")
+                        dbPath = projectPath
+                        print("⚠️ Использую путь проекта: \(projectPath)")
+                    }
+                } else {
+                    dbPath = dbURL.path
+                    print("📝 База данных будет создана в: \(dbURL.path)")
+                }
             }
+            
+            // Сохраняем путь в UserDefaults
+            UserDefaults.standard.set(dbPath, forKey: "DatabasePath")
         }
         
         print("🔍 Финальный путь к базе: \(dbPath)")
@@ -263,6 +273,50 @@ class DatabaseManager {
         let escapedName = name.replacingOccurrences(of: "'", with: "''")
         executeUpdate("UPDATE USERLIST SET login = '\(escapedName)'")
         executeUpdate("UPDATE nagrada SET who_sozd = '\(escapedName)', who_red = '\(escapedName)'")
+    }
+    
+    func getDatabasePath() -> String {
+        return dbPath
+    }
+    
+    func closeDatabase() {
+        if let db = db {
+            sqlite3_close(db)
+            self.db = nil
+        }
+    }
+    
+    func openDatabase(at path: String) -> Bool {
+        // Закрываем текущую базу, если открыта
+        closeDatabase()
+        
+        // Обновляем путь
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: path) else {
+            print("❌ Файл базы данных не существует: \(path)")
+            return false
+        }
+        
+        // Открываем новую базу
+        let result = sqlite3_open(path, &db)
+        
+        if result != SQLITE_OK {
+            var errorMessage = "Неизвестная ошибка"
+            if let db = db {
+                errorMessage = String(cString: sqlite3_errmsg(db))
+                sqlite3_close(db)
+            }
+            print("❌ Ошибка открытия базы данных: \(errorMessage)")
+            self.db = nil
+            return false
+        }
+        
+        // Обновляем путь к базе данных
+        self.dbPath = path
+        // Сохраняем путь в UserDefaults
+        UserDefaults.standard.set(path, forKey: "DatabasePath")
+        print("✅ База данных успешно открыта: \(path)")
+        return true
     }
     
     deinit {

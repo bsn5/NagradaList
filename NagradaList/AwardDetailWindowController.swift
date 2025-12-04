@@ -875,8 +875,203 @@ class AwardDetailWindowController: NSWindowController, NSWindowDelegate, NSCombo
     }
     
     func validateFields() -> Bool {
-        // Check required fields - simplified for now
+        // Загружаем настройки обязательных полей из базы данных
+        guard let requiredFieldsSettings = getRequiredFieldsSettings() else {
+            // Если не удалось загрузить настройки, используем все поля как обязательные
+            return validateAllFields()
+        }
+        
+        var missingFields: [String] = []
+        
+        // Маппинг названий полей в UI на элементы формы
+        let fieldMapping: [String: (() -> Bool)] = [
+            "Кампания": { [weak self] in
+                guard let value = self?.comboKampania?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Вид": { [weak self] in
+                guard let index = self?.comboNagrada?.indexOfSelectedItem else { return false }
+                return index >= 0
+            },
+            "Номер": { [weak self] in
+                guard let value = self?.textNomer?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty && Int(value) != nil && Int(value)! > 0
+            },
+            "Степень": { [weak self] in
+                guard let value = self?.textStepen?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty && Int(value) != nil && Int(value)! > 0
+            },
+            "Фамилия": { [weak self] in
+                guard let value = self?.textF?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Имя": { [weak self] in
+                guard let value = self?.textI?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Отчество": { [weak self] in
+                guard let value = self?.textO?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Часть": { [weak self] in
+                guard let value = self?.comboChast?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Подразделение1": { [weak self] in
+                guard let value = self?.comboPodrazdel1?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Подразделение2": { [weak self] in
+                guard let value = self?.comboPodrazdel2?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Чин": { [weak self] in
+                guard let value = self?.comboChin?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Должность": { [weak self] in
+                guard let value = self?.textDolzhnost?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Отличие": { [weak self] in
+                guard let value = self?.textOtlichie?.string else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Комментарий": { [weak self] in
+                guard let value = self?.textComment?.string else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Приказ": { [weak self] in
+                guard let value = self?.textPrikaz?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Номер приказа": { [weak self] in
+                guard let value = self?.textNomerPrik?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Дата приказа": { [weak self] in
+                guard let value = self?.textDataPrik?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Отношение": { [weak self] in
+                guard let value = self?.textOtnosh?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Номер отношения": { [weak self] in
+                guard let value = self?.textNomerOtnosh?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Дата отношения": { [weak self] in
+                guard let value = self?.textDataOtnosh?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Архив": { [weak self] in
+                guard let value = self?.comboArxiv?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Фонд": { [weak self] in
+                guard let value = self?.textFond?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Дело": { [weak self] in
+                guard let value = self?.textDelo?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Опись": { [weak self] in
+                guard let value = self?.textOpis?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Лист": { [weak self] in
+                guard let value = self?.textList?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Другие источники": { [weak self] in
+                guard let value = self?.textDrugieIst?.stringValue else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            },
+            "Служебные отметки": { [weak self] in
+                guard let value = self?.textSluzhOtm?.string else { return false }
+                return !value.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+        ]
+        
+        // Проверяем каждое обязательное поле
+        for (fieldName, isRequired) in requiredFieldsSettings {
+            if isRequired {
+                if let validator = fieldMapping[fieldName] {
+                    if !validator() {
+                        missingFields.append(fieldName)
+                    }
+                }
+            }
+        }
+        
+        // Если есть незаполненные обязательные поля, показываем ошибку
+        if !missingFields.isEmpty {
+            let fieldsList = missingFields.joined(separator: ", ")
+            showAlert(message: "Не заполнены обязательные поля:\n\(fieldsList)")
+            return false
+        }
+        
         return true
+    }
+    
+    func validateAllFields() -> Bool {
+        // Валидация всех полей по умолчанию (если настройки не загружены)
+        var missingFields: [String] = []
+        
+        // Базовые обязательные поля
+        if comboNagrada?.indexOfSelectedItem ?? -1 < 0 {
+            missingFields.append("Вид")
+        }
+        if textNomer?.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+            missingFields.append("Номер")
+        }
+        if textStepen?.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+            missingFields.append("Степень")
+        }
+        if textF?.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+            missingFields.append("Фамилия")
+        }
+        if textI?.stringValue.trimmingCharacters(in: .whitespaces).isEmpty ?? true {
+            missingFields.append("Имя")
+        }
+        
+        if !missingFields.isEmpty {
+            let fieldsList = missingFields.joined(separator: ", ")
+            showAlert(message: "Не заполнены обязательные поля:\n\(fieldsList)")
+            return false
+        }
+        
+        return true
+    }
+    
+    func getRequiredFieldsSettings() -> [String: Bool]? {
+        // Создаем таблицу, если её нет
+        let createTableQuery = """
+        CREATE TABLE IF NOT EXISTS Обязательные_поля (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            поле TEXT UNIQUE NOT NULL,
+            обязательное INTEGER NOT NULL DEFAULT 1
+        )
+        """
+        DatabaseManager.shared.executeUpdate(createTableQuery)
+        
+        // Загружаем настройки обязательных полей из базы данных
+        guard let results = DatabaseManager.shared.executeQuery("SELECT поле, обязательное FROM Обязательные_поля") else {
+            return nil
+        }
+        
+        var settings: [String: Bool] = [:]
+        for row in results {
+            if let fieldName = row["поле"] as? String,
+               let isRequired = (row["обязательное"] as? Int64).map({ $0 == 1 }) {
+                settings[fieldName] = isRequired
+            }
+        }
+        
+        // Если настройки не найдены, возвращаем nil (будет использована валидация по умолчанию)
+        return settings.isEmpty ? nil : settings
     }
     
     func checkDuplicate() -> Bool {

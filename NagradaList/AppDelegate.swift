@@ -115,6 +115,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tab6.view = view6
         tabView.addTabViewItem(tab6)
         
+        // Tab 5: Service
+        let tab7 = NSTabViewItem(identifier: "Service")
+        tab7.label = "Служебная"
+        let view7 = createServiceView(windowController: windowController)
+        tab7.view = view7
+        tabView.addTabViewItem(tab7)
+        
         // Store tabView reference
         windowController.tabView = tabView
     }
@@ -621,7 +628,273 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func createUnloadView(windowController: MainWindowController) -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
-        // Basic implementation
+        
+        // ========== ЛЕВАЯ ЧАСТЬ: ПРОВЕРКА СТАТУСА ==========
+        // GroupBox для проверки статуса
+        let statusGroupBox = NSBox(frame: NSRect(x: 20, y: 450, width: 460, height: 230))
+        statusGroupBox.title = "Проверка статуса"
+        statusGroupBox.boxType = .primary
+        statusGroupBox.contentViewMargins = NSSize(width: 15, height: -10)
+        view.addSubview(statusGroupBox)
+        
+        // Текстовое поле для статуса проверки
+        let labelCheckStatus = NSTextField(labelWithString: "Статус проверки:")
+        labelCheckStatus.frame = NSRect(x: 15, y: 185, width: 120, height: 20)
+        labelCheckStatus.alignment = .right
+        statusGroupBox.addSubview(labelCheckStatus)
+        
+        let textCheckStatus = NSTextField(frame: NSRect(x: 145, y: 183, width: 290, height: 24))
+        textCheckStatus.isEditable = false
+        textCheckStatus.isBordered = true
+        textCheckStatus.backgroundColor = .textBackgroundColor
+        textCheckStatus.stringValue = ""
+        windowController.textCheckStatus = textCheckStatus
+        statusGroupBox.addSubview(textCheckStatus)
+        
+        // Кнопки "Завершено" и "Не завершено"
+        let buttonEnded = NSButton(title: "Завершено", target: windowController, action: #selector(MainWindowController.buttonEndedClicked(_:)))
+        buttonEnded.frame = NSRect(x: 145, y: 140, width: 140, height: 35)
+        buttonEnded.bezelStyle = .rounded
+        windowController.buttonEnded = buttonEnded
+        statusGroupBox.addSubview(buttonEnded)
+        
+        let buttonNotEnded = NSButton(title: "Не завершено", target: windowController, action: #selector(MainWindowController.buttonNotEndedClicked(_:)))
+        buttonNotEnded.frame = NSRect(x: 295, y: 140, width: 140, height: 35)
+        buttonNotEnded.bezelStyle = .rounded
+        windowController.buttonNotEnded = buttonNotEnded
+        statusGroupBox.addSubview(buttonNotEnded)
+        
+        // ========== ПРАВАЯ ЧАСТЬ: СТАТИСТИКА И ВЫГРУЗКА ==========
+        // GroupBox для статистики и выгрузки
+        let unloadGroupBox = NSBox(frame: NSRect(x: 500, y: 450, width: 480, height: 230))
+        unloadGroupBox.title = "Статистика и выгрузка"
+        unloadGroupBox.boxType = .primary
+        unloadGroupBox.contentViewMargins = NSSize(width: 15, height: -10)
+        view.addSubview(unloadGroupBox)
+        
+        // Текстовое поле для статистики выгрузки
+        let labelUnloadStat = NSTextField(labelWithString: "Статистика:")
+        labelUnloadStat.frame = NSRect(x: 15, y: 185, width: 100, height: 20)
+        labelUnloadStat.alignment = .right
+        unloadGroupBox.addSubview(labelUnloadStat)
+        
+        let scrollViewUnloadStat = NSScrollView(frame: NSRect(x: 125, y: 50, width: 340, height: 140))
+        scrollViewUnloadStat.hasVerticalScroller = true
+        scrollViewUnloadStat.borderType = .bezelBorder
+        scrollViewUnloadStat.autohidesScrollers = true
+        
+        let textUnloadStat = NSTextView(frame: scrollViewUnloadStat.bounds)
+        textUnloadStat.isEditable = false
+        textUnloadStat.isSelectable = true
+        textUnloadStat.font = NSFont.systemFont(ofSize: 12)
+        textUnloadStat.string = ""
+        scrollViewUnloadStat.documentView = textUnloadStat
+        windowController.textUnloadStat = textUnloadStat
+        unloadGroupBox.addSubview(scrollViewUnloadStat)
+        
+        // Кнопка "Выгрузить данные"
+        let buttonUnloadData = NSButton(title: "Выгрузить данные", target: windowController, action: #selector(MainWindowController.buttonUnloadDataClicked(_:)))
+        buttonUnloadData.frame = NSRect(x: 125, y: 10, width: 340, height: 35)
+        buttonUnloadData.bezelStyle = .rounded
+        windowController.buttonUnloadData = buttonUnloadData
+        unloadGroupBox.addSubview(buttonUnloadData)
+        
+        // ========== НИЖНЯЯ ЧАСТЬ: ЛОГ ВЫГРУЗКИ ==========
+        // GroupBox для лога выгрузки
+        let logGroupBox = NSBox(frame: NSRect(x: 20, y: 20, width: 960, height: 420))
+        logGroupBox.title = "Лог выгрузки"
+        logGroupBox.boxType = .primary
+        logGroupBox.contentViewMargins = NSSize(width: 15, height: -30)
+        view.addSubview(logGroupBox)
+        
+        // Текстовое поле для лога выгрузки
+        let scrollViewUnloadLog = NSScrollView(frame: NSRect(x: 15, y: 50, width: 930, height: 360))
+        scrollViewUnloadLog.hasVerticalScroller = true
+        scrollViewUnloadLog.hasHorizontalScroller = true
+        scrollViewUnloadLog.borderType = .bezelBorder
+        scrollViewUnloadLog.autohidesScrollers = true
+        
+        let textUnloadLog = NSTextView(frame: scrollViewUnloadLog.bounds)
+        textUnloadLog.isEditable = false
+        textUnloadLog.isSelectable = true
+        textUnloadLog.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textUnloadLog.string = ""
+        scrollViewUnloadLog.documentView = textUnloadLog
+        windowController.textUnloadLog = textUnloadLog
+        logGroupBox.addSubview(scrollViewUnloadLog)
+        
+        return view
+    }
+    
+    func createServiceView(windowController: MainWindowController) -> NSView {
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        
+        // ========== ГРУППА: НАСТРОЙКИ ОПЕРАТОРА ==========
+        // GroupBox для настроек оператора
+        let operatorGroupBox = NSBox(frame: NSRect(x: 20, y: 500, width: 960, height: 180))
+        operatorGroupBox.title = "Настройки оператора"
+        operatorGroupBox.boxType = .primary
+        operatorGroupBox.contentViewMargins = NSSize(width: 15, height: -10)
+        view.addSubview(operatorGroupBox)
+        
+        // Метка для поля имени оператора
+        let labelOperatorName = NSTextField(labelWithString: "Имя оператора:")
+        labelOperatorName.frame = NSRect(x: 15, y: 135, width: 120, height: 20)
+        labelOperatorName.alignment = .right
+        operatorGroupBox.addSubview(labelOperatorName)
+        
+        // Текстовое поле для ввода имени оператора
+        let textOperatorName = NSTextField(frame: NSRect(x: 145, y: 133, width: 400, height: 24))
+        textOperatorName.isEditable = true
+        textOperatorName.isBordered = true
+        textOperatorName.backgroundColor = .textBackgroundColor
+        textOperatorName.stringValue = DatabaseManager.shared.getUserName()
+        textOperatorName.placeholderString = "Введите имя оператора"
+        windowController.textOperatorName = textOperatorName
+        operatorGroupBox.addSubview(textOperatorName)
+        
+        // Кнопка "Установить имя оператора"
+        let buttonSetOperatorName = NSButton(title: "Установить имя оператора", target: windowController, action: #selector(MainWindowController.buttonSetOperatorNameClicked(_:)))
+        buttonSetOperatorName.frame = NSRect(x: 560, y: 130, width: 200, height: 35)
+        buttonSetOperatorName.bezelStyle = .rounded
+        windowController.buttonSetOperatorName = buttonSetOperatorName
+        operatorGroupBox.addSubview(buttonSetOperatorName)
+        
+        // Информационный текст
+        let infoText = NSTextField(wrappingLabelWithString: "Имя оператора используется для отметки создателя и редактора записей в базе данных.")
+        infoText.frame = NSRect(x: 145, y: 80, width: 800, height: 40)
+        infoText.font = NSFont.systemFont(ofSize: 11)
+        infoText.textColor = .secondaryLabelColor
+        operatorGroupBox.addSubview(infoText)
+        
+        // Текущее имя оператора (только для отображения)
+        let currentNameLabel = NSTextField(labelWithString: "Текущее имя оператора:")
+        currentNameLabel.frame = NSRect(x: 15, y: 50, width: 150, height: 20)
+        currentNameLabel.alignment = .right
+        operatorGroupBox.addSubview(currentNameLabel)
+        
+        let currentNameValue = NSTextField(labelWithString: DatabaseManager.shared.getUserName())
+        currentNameValue.frame = NSRect(x: 175, y: 48, width: 300, height: 24)
+        currentNameValue.font = NSFont.boldSystemFont(ofSize: 13)
+        currentNameValue.textColor = .systemBlue
+        windowController.textCurrentOperatorName = currentNameValue
+        operatorGroupBox.addSubview(currentNameValue)
+        
+        // ========== ГРУППА: ПУТЬ К БАЗЕ ДАННЫХ ==========
+        // GroupBox для пути к базе данных
+        let dbPathGroupBox = NSBox(frame: NSRect(x: 20, y: 420, width: 960, height: 60))
+        dbPathGroupBox.title = "Путь к базе данных"
+        dbPathGroupBox.boxType = .primary
+        dbPathGroupBox.contentViewMargins = NSSize(width: 15, height: -10)
+        view.addSubview(dbPathGroupBox)
+        
+        // Метка для пути к базе данных
+        let labelDbPath = NSTextField(labelWithString: "Путь к базе данных:")
+        labelDbPath.frame = NSRect(x: 15, y: 25, width: 120, height: 20)
+        labelDbPath.alignment = .right
+        dbPathGroupBox.addSubview(labelDbPath)
+        
+        let textDbPath = NSTextField(frame: NSRect(x: 145, y: 23, width: 650, height: 24))
+        textDbPath.isEditable = false
+        textDbPath.isBordered = true
+        textDbPath.backgroundColor = .textBackgroundColor
+        textDbPath.stringValue = DatabaseManager.shared.getDatabasePath()
+        textDbPath.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        textDbPath.textColor = .labelColor
+        windowController.textDbPath = textDbPath
+        dbPathGroupBox.addSubview(textDbPath)
+        
+        // Кнопка "Изменить путь"
+        let buttonChangeDbPath = NSButton(title: "Изменить путь", target: windowController, action: #selector(MainWindowController.buttonChangeDbPathClicked(_:)))
+        buttonChangeDbPath.frame = NSRect(x: 805, y: 20, width: 140, height: 30)
+        buttonChangeDbPath.bezelStyle = .rounded
+        windowController.buttonChangeDbPath = buttonChangeDbPath
+        dbPathGroupBox.addSubview(buttonChangeDbPath)
+        
+        // ========== ГРУППА: ОБЯЗАТЕЛЬНЫЕ ПОЛЯ ==========
+        // GroupBox для обязательных полей
+        let requiredFieldsGroupBox = NSBox(frame: NSRect(x: 20, y: 20, width: 960, height: 380))
+        requiredFieldsGroupBox.title = "Обязательные поля"
+        requiredFieldsGroupBox.boxType = .primary
+        requiredFieldsGroupBox.contentViewMargins = NSSize(width: 15, height: -10)
+        view.addSubview(requiredFieldsGroupBox)
+        
+        // ScrollView для чекбоксов обязательных полей
+        // Увеличиваем отступ сверху, чтобы заголовок не перекрывал чекбоксы
+        let scrollViewRequiredFields = NSScrollView(frame: NSRect(x: 15, y: 50, width: 930, height: 320))
+        scrollViewRequiredFields.hasVerticalScroller = true
+        scrollViewRequiredFields.borderType = .bezelBorder
+        scrollViewRequiredFields.autohidesScrollers = true
+        
+        // Создаем чекбоксы для каждого обязательного поля
+        let requiredFields = NagradaConstants.requiredFields
+        let columns = 3
+        let checkboxWidth: CGFloat = 280
+        let checkboxHeight: CGFloat = 20
+        let spacingX: CGFloat = 20
+        let spacingY: CGFloat = 5
+        let startX: CGFloat = 10
+        let startY: CGFloat = 10
+        
+        // Рассчитываем количество строк
+        let totalRows = (requiredFields.count + columns - 1) / columns
+        let containerHeight = max(CGFloat(totalRows) * (checkboxHeight + spacingY) + startY * 2, 100)
+        
+        // Контейнер для чекбоксов (координаты в macOS идут снизу вверх)
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: containerHeight))
+        
+        var requiredFieldsCheckboxes: [NSButton] = []
+        
+        for (index, fieldName) in requiredFields.enumerated() {
+            let column = index % columns
+            let row = index / columns
+            
+            // Координаты: x - горизонтально, y - снизу вверх
+            // Первая строка должна быть вверху контейнера
+            let x = startX + CGFloat(column) * (checkboxWidth + spacingX)
+            // Вычисляем y от верха контейнера (containerHeight - y от верха)
+            let yFromTop = startY + CGFloat(row) * (checkboxHeight + spacingY)
+            let y = containerHeight - yFromTop - checkboxHeight
+            
+            let checkbox = NSButton(checkboxWithTitle: fieldName, target: nil, action: nil)
+            checkbox.frame = NSRect(x: x, y: y, width: checkboxWidth, height: checkboxHeight)
+            checkbox.state = .on // По умолчанию все поля обязательные
+            requiredFieldsCheckboxes.append(checkbox)
+            containerView.addSubview(checkbox)
+        }
+        
+        // Устанавливаем размер контейнера
+        containerView.frame = NSRect(x: 0, y: 0, width: 900, height: containerHeight)
+        
+        scrollViewRequiredFields.documentView = containerView
+        windowController.requiredFieldsCheckboxes = requiredFieldsCheckboxes
+        requiredFieldsGroupBox.addSubview(scrollViewRequiredFields)
+        
+        // Кнопки управления
+        let buttonSaveRequiredFields = NSButton(title: "Сохранить", target: windowController, action: #selector(MainWindowController.buttonSaveRequiredFieldsClicked(_:)))
+        buttonSaveRequiredFields.frame = NSRect(x: 15, y: 10, width: 120, height: 30)
+        buttonSaveRequiredFields.bezelStyle = .rounded
+        windowController.buttonSaveRequiredFields = buttonSaveRequiredFields
+        requiredFieldsGroupBox.addSubview(buttonSaveRequiredFields)
+        
+        let buttonLoadRequiredFields = NSButton(title: "Загрузить", target: windowController, action: #selector(MainWindowController.buttonLoadRequiredFieldsClicked(_:)))
+        buttonLoadRequiredFields.frame = NSRect(x: 145, y: 10, width: 120, height: 30)
+        buttonLoadRequiredFields.bezelStyle = .rounded
+        windowController.buttonLoadRequiredFields = buttonLoadRequiredFields
+        requiredFieldsGroupBox.addSubview(buttonLoadRequiredFields)
+        
+        let buttonSelectAllRequiredFields = NSButton(title: "Выбрать все", target: windowController, action: #selector(MainWindowController.buttonSelectAllRequiredFieldsClicked(_:)))
+        buttonSelectAllRequiredFields.frame = NSRect(x: 275, y: 10, width: 120, height: 30)
+        buttonSelectAllRequiredFields.bezelStyle = .rounded
+        windowController.buttonSelectAllRequiredFields = buttonSelectAllRequiredFields
+        requiredFieldsGroupBox.addSubview(buttonSelectAllRequiredFields)
+        
+        let buttonDeselectAllRequiredFields = NSButton(title: "Снять все", target: windowController, action: #selector(MainWindowController.buttonDeselectAllRequiredFieldsClicked(_:)))
+        buttonDeselectAllRequiredFields.frame = NSRect(x: 405, y: 10, width: 120, height: 30)
+        buttonDeselectAllRequiredFields.bezelStyle = .rounded
+        windowController.buttonDeselectAllRequiredFields = buttonDeselectAllRequiredFields
+        requiredFieldsGroupBox.addSubview(buttonDeselectAllRequiredFields)
+        
         return view
     }
 
