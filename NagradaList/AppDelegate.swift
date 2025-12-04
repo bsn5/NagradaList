@@ -388,7 +388,234 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func createGroupReplacementView(windowController: MainWindowController) -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
-        // Basic implementation
+        
+        // ========== ЛЕВАЯ ВЕРХНЯЯ ЧАСТЬ: ПОИСК ==========
+        // GroupBox для поиска - слева вверху, элементы один под другим
+        let searchGroupBox = NSBox(frame: NSRect(x: 20, y: 450, width: 460, height: 230))
+        searchGroupBox.title = "Поиск наград"
+        searchGroupBox.boxType = .primary
+        searchGroupBox.contentViewMargins = NSSize(width: 15, height: -10) // Очень большие отступы сверху для заголовка
+        view.addSubview(searchGroupBox)
+        
+        // Поле для поиска (сверху, с учетом отступа от заголовка)
+        let labelPole = NSTextField(labelWithString: "Поле:")
+        labelPole.frame = NSRect(x: 15, y: 185, width: 100, height: 20)
+        labelPole.alignment = .right
+        searchGroupBox.addSubview(labelPole)
+        
+        let comboPole = NSComboBox(frame: NSRect(x: 125, y: 183, width: 310, height: 24))
+        comboPole.addItems(withObjectValues: [
+            "Нет", "Отличие", "Приказ", "Номер приказа", "Дата приказа",
+            "Часть", "Подразделение 1", "Подразделение 2", "Архив", "Фонд",
+            "Опись", "Дело", "Др. источники", "Чин", "Должность",
+            "Оператор (создание)", "Кампания", "Лист", "Комментарий",
+            "Губерния", "Уезд", "Деревня", "Служебные отметки",
+            "Отношение", "Номер отношения", "Дата отношения"
+        ])
+        comboPole.selectItem(at: 0)
+        windowController.comboPole = comboPole
+        searchGroupBox.addSubview(comboPole)
+        
+        // Тип сравнения (под полем)
+        let labelSravnenie = NSTextField(labelWithString: "Тип сравнения:")
+        labelSravnenie.frame = NSRect(x: 15, y: 150, width: 100, height: 20)
+        labelSravnenie.alignment = .right
+        searchGroupBox.addSubview(labelSravnenie)
+        
+        let comboSravnenieType = NSComboBox(frame: NSRect(x: 125, y: 148, width: 310, height: 24))
+        comboSravnenieType.addItems(withObjectValues: ["Равно", "Включает"])
+        comboSravnenieType.selectItem(at: 0)
+        windowController.comboSravnenieType = comboSravnenieType
+        searchGroupBox.addSubview(comboSravnenieType)
+        
+        // Значение для поиска (под типом сравнения)
+        let labelZnachenie = NSTextField(labelWithString: "Значение:")
+        labelZnachenie.frame = NSRect(x: 15, y: 115, width: 100, height: 20)
+        labelZnachenie.alignment = .right
+        searchGroupBox.addSubview(labelZnachenie)
+        
+        let scrollViewZnachenie = NSScrollView(frame: NSRect(x: 125, y: 55, width: 310, height: 55))
+        scrollViewZnachenie.hasVerticalScroller = true
+        scrollViewZnachenie.borderType = .bezelBorder
+        scrollViewZnachenie.autohidesScrollers = true
+        
+        let textZnachenie = NSTextView(frame: scrollViewZnachenie.bounds)
+        textZnachenie.isEditable = true
+        textZnachenie.isSelectable = true
+        textZnachenie.font = NSFont.systemFont(ofSize: 12)
+        scrollViewZnachenie.documentView = textZnachenie
+        windowController.textZnachenie = textZnachenie
+        searchGroupBox.addSubview(scrollViewZnachenie)
+        
+        // Чекбокс "Учитывать регистр" и кнопка "Заполнить список" (внизу, ниже поля "Значение")
+        let checkBoxUchitivatRegistr = NSButton(checkboxWithTitle: "Учитывать регистр", target: nil, action: nil)
+        checkBoxUchitivatRegistr.frame = NSRect(x: 125, y: 20, width: 180, height: 20)
+        checkBoxUchitivatRegistr.state = .off
+        windowController.checkBoxUchitivatRegistr = checkBoxUchitivatRegistr
+        searchGroupBox.addSubview(checkBoxUchitivatRegistr)
+        
+        let buttonFillList = NSButton(title: "Заполнить список", target: windowController, action: #selector(MainWindowController.buttonFillListClicked(_:)))
+        buttonFillList.frame = NSRect(x: 315, y: 18, width: 120, height: 30)
+        buttonFillList.bezelStyle = .rounded
+        windowController.buttonFillList = buttonFillList
+        searchGroupBox.addSubview(buttonFillList)
+        
+        // ========== ЛЕВАЯ НИЖНЯЯ ЧАСТЬ: ИЗМЕНЕНИЯ ==========
+        // GroupBox для изменений - слева внизу
+        let changeGroupBox = NSBox(frame: NSRect(x: 20, y: 20, width: 460, height: 420))
+        changeGroupBox.title = "Изменения"
+        changeGroupBox.boxType = .primary
+        changeGroupBox.contentViewMargins = NSSize(width: 15, height: -30) // Очень большие отступы сверху для заголовка
+        view.addSubview(changeGroupBox)
+        
+        // Тип изменения (сверху, с учетом отступа от заголовка)
+        let labelChangeType = NSTextField(labelWithString: "Тип изменения:")
+        labelChangeType.frame = NSRect(x: 15, y: 380, width: 100, height: 20)
+        labelChangeType.alignment = .right
+        changeGroupBox.addSubview(labelChangeType)
+        
+        let comboChangeType = NSComboBox(frame: NSRect(x: 125, y: 378, width: 310, height: 24))
+        comboChangeType.addItems(withObjectValues: [
+            "Нет", "Установить текст", "Замена части текста",
+            "Добавление текста", "Очистить поле"
+        ])
+        comboChangeType.selectItem(at: 0)
+        windowController.comboChangeType = comboChangeType
+        changeGroupBox.addSubview(comboChangeType)
+        
+        // Поле для изменения (под типом изменения)
+        let labelFieldToChange = NSTextField(labelWithString: "Поле:")
+        labelFieldToChange.frame = NSRect(x: 15, y: 345, width: 100, height: 20)
+        labelFieldToChange.alignment = .right
+        changeGroupBox.addSubview(labelFieldToChange)
+        
+        let comboFieldToChange = NSComboBox(frame: NSRect(x: 125, y: 343, width: 310, height: 24))
+        comboFieldToChange.addItems(withObjectValues: [
+            "Нет", "Отличие", "Приказ", "Номер приказа", "Дата приказа",
+            "Часть", "Подразделение 1", "Подразделение 2", "Архив", "Фонд",
+            "Опись", "Дело", "Др. источники", "Чин", "Должность",
+            "Оператор (создание)", "Кампания", "Лист", "Комментарий",
+            "Губерния", "Уезд", "Деревня", "Служебные отметки",
+            "Отношение", "Номер отношения", "Дата отношения"
+        ])
+        comboFieldToChange.selectItem(at: 0)
+        windowController.comboFieldToChange = comboFieldToChange
+        changeGroupBox.addSubview(comboFieldToChange)
+        
+        // Текст изменения 1 (под полем)
+        let labelChange1 = NSTextField(labelWithString: "Текст 1:")
+        labelChange1.frame = NSRect(x: 15, y: 310, width: 100, height: 20)
+        labelChange1.alignment = .right
+        changeGroupBox.addSubview(labelChange1)
+        
+        let scrollViewChange1 = NSScrollView(frame: NSRect(x: 125, y: 210, width: 310, height: 90))
+        scrollViewChange1.hasVerticalScroller = true
+        scrollViewChange1.borderType = .bezelBorder
+        scrollViewChange1.autohidesScrollers = true
+        
+        let textChange1 = NSTextView(frame: scrollViewChange1.bounds)
+        textChange1.isEditable = true
+        textChange1.isSelectable = true
+        textChange1.font = NSFont.systemFont(ofSize: 12)
+        scrollViewChange1.documentView = textChange1
+        windowController.textChange1 = textChange1
+        changeGroupBox.addSubview(scrollViewChange1)
+        
+        // Текст изменения 2 (под текстом 1)
+        let labelChange2 = NSTextField(labelWithString: "Текст 2:")
+        labelChange2.frame = NSRect(x: 15, y: 185, width: 100, height: 20)
+        labelChange2.alignment = .right
+        changeGroupBox.addSubview(labelChange2)
+        
+        let scrollViewChange2 = NSScrollView(frame: NSRect(x: 125, y: 90, width: 310, height: 90))
+        scrollViewChange2.hasVerticalScroller = true
+        scrollViewChange2.borderType = .bezelBorder
+        scrollViewChange2.autohidesScrollers = true
+        
+        let textChange2 = NSTextView(frame: scrollViewChange2.bounds)
+        textChange2.isEditable = true
+        textChange2.isSelectable = true
+        textChange2.font = NSFont.systemFont(ofSize: 12)
+        scrollViewChange2.documentView = textChange2
+        windowController.textChange2 = textChange2
+        changeGroupBox.addSubview(scrollViewChange2)
+        
+        // Кнопка "Выполнить изменения" (внизу)
+        let buttonMakeChanges = NSButton(title: "Выполнить изменения", target: windowController, action: #selector(MainWindowController.buttonMakeChangesClicked(_:)))
+        buttonMakeChanges.frame = NSRect(x: 125, y: 50, width: 310, height: 35)
+        buttonMakeChanges.bezelStyle = .rounded
+        windowController.buttonMakeChanges = buttonMakeChanges
+        changeGroupBox.addSubview(buttonMakeChanges)
+        
+        // ========== ПРАВАЯ ЧАСТЬ: СПИСОК НАГРАД ==========
+        // GroupBox для списка найденных наград - справа, занимает большую часть экрана по вертикали
+        let listGroupBox = NSBox(frame: NSRect(x: 500, y: 20, width: 480, height: 660))
+        listGroupBox.title = "Найденные награды"
+        listGroupBox.boxType = .primary
+        listGroupBox.contentViewMargins = NSSize(width: 15, height: -30) // Очень большие отступы сверху для заголовка
+        view.addSubview(listGroupBox)
+        
+        // Таблица с найденными наградами (начинается ниже заголовка)
+        let scrollViewList = NSScrollView(frame: NSRect(x: 15, y: 50, width: 450, height: 600))
+        scrollViewList.hasVerticalScroller = true
+        scrollViewList.hasHorizontalScroller = false
+        scrollViewList.borderType = .bezelBorder
+        scrollViewList.autohidesScrollers = true
+        
+        let listSelectedMedals = NSTableView(frame: scrollViewList.bounds)
+        listSelectedMedals.gridStyleMask = [.solidHorizontalGridLineMask]
+        listSelectedMedals.intercellSpacing = NSSize(width: 1, height: 2)
+        listSelectedMedals.rowHeight = 22.0
+        listSelectedMedals.usesAlternatingRowBackgroundColors = true
+        listSelectedMedals.allowsColumnReordering = false
+        listSelectedMedals.allowsColumnResizing = false
+        listSelectedMedals.selectionHighlightStyle = .regular
+        listSelectedMedals.allowsEmptySelection = true
+        listSelectedMedals.allowsMultipleSelection = false
+        
+        // Колонка с чекбоксом
+        let columnCheck = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Check"))
+        columnCheck.title = ""
+        columnCheck.width = 30
+        columnCheck.minWidth = 30
+        columnCheck.maxWidth = 30
+        columnCheck.resizingMask = []
+        listSelectedMedals.addTableColumn(columnCheck)
+        
+        // Колонка с информацией о награде
+        let columnInfo = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("Info"))
+        columnInfo.title = "Награда"
+        columnInfo.width = 410
+        columnInfo.minWidth = 410
+        columnInfo.maxWidth = 410
+        columnInfo.resizingMask = []
+        listSelectedMedals.addTableColumn(columnInfo)
+        
+        listSelectedMedals.delegate = windowController
+        listSelectedMedals.dataSource = windowController
+        scrollViewList.documentView = listSelectedMedals
+        windowController.listSelectedMedals = listSelectedMedals
+        listGroupBox.addSubview(scrollViewList)
+        
+        // Кнопки управления выбором
+        let buttonSelectAll = NSButton(title: "Выбрать все", target: windowController, action: #selector(MainWindowController.buttonSelectAllClicked(_:)))
+        buttonSelectAll.frame = NSRect(x: 15, y: 10, width: 100, height: 30)
+        buttonSelectAll.bezelStyle = .rounded
+        windowController.buttonSelectAll = buttonSelectAll
+        listGroupBox.addSubview(buttonSelectAll)
+        
+        let buttonUnselectAll = NSButton(title: "Снять выбор", target: windowController, action: #selector(MainWindowController.buttonUnselectAllClicked(_:)))
+        buttonUnselectAll.frame = NSRect(x: 125, y: 10, width: 100, height: 30)
+        buttonUnselectAll.bezelStyle = .rounded
+        windowController.buttonUnselectAll = buttonUnselectAll
+        listGroupBox.addSubview(buttonUnselectAll)
+        
+        let buttonOpenMedal = NSButton(title: "Открыть награду", target: windowController, action: #selector(MainWindowController.buttonOpenMedalClicked(_:)))
+        buttonOpenMedal.frame = NSRect(x: 235, y: 10, width: 120, height: 30)
+        buttonOpenMedal.bezelStyle = .rounded
+        windowController.buttonOpenMedal = buttonOpenMedal
+        listGroupBox.addSubview(buttonOpenMedal)
+        
         return view
     }
     

@@ -929,6 +929,127 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
         alert.runModal()
     }
     
+    // MARK: - Group Replacement Actions
+    
+    @objc @IBAction func buttonFillListClicked(_ sender: Any) {
+        // Получаем параметры поиска
+        let fieldIndex = comboPole?.indexOfSelectedItem ?? 0
+        let fieldName: String?
+        
+        if fieldIndex == 0 {
+            // "Нет" - ищем по всем записям
+            fieldName = nil
+        } else {
+            fieldName = GroupReplacementManager.shared.getFieldName(for: comboPole?.stringValue ?? "")
+        }
+        
+        let comparisonType = comboSravnenieType?.indexOfSelectedItem ?? 0
+        let value = textZnachenie?.string ?? ""
+        let caseSensitive = checkBoxUchitivatRegistr?.state == .on
+        
+        // Заполняем список найденных наград
+        selectedMedals = GroupReplacementManager.shared.fillList(
+            fieldName: fieldName,
+            comparisonType: comparisonType,
+            value: value,
+            caseSensitive: caseSensitive
+        )
+        
+        listSelectedMedals?.reloadData()
+        showAlert(message: "Найдено наград: \(selectedMedals.count)")
+    }
+    
+    @objc @IBAction func buttonSelectAllClicked(_ sender: Any) {
+        for i in 0..<selectedMedals.count {
+            selectedMedals[i].isSelected = true
+        }
+        listSelectedMedals?.reloadData()
+    }
+    
+    @objc @IBAction func buttonUnselectAllClicked(_ sender: Any) {
+        for i in 0..<selectedMedals.count {
+            selectedMedals[i].isSelected = false
+        }
+        listSelectedMedals?.reloadData()
+    }
+    
+    @objc func checkboxClicked(_ sender: NSButton) {
+        let row = sender.tag
+        guard row >= 0 && row < selectedMedals.count else { return }
+        selectedMedals[row].isSelected = sender.state == .on
+    }
+    
+    @objc @IBAction func buttonOpenMedalClicked(_ sender: Any) {
+        let selectedRow = listSelectedMedals?.selectedRow ?? -1
+        guard selectedRow >= 0 && selectedRow < selectedMedals.count else {
+            showAlert(message: "Выберите награду для открытия")
+            return
+        }
+        
+        let medalId = selectedMedals[selectedRow].id
+        openAwardDetailWindow(awardId: medalId)
+    }
+    
+    func openAwardDetailWindow(awardId: String) {
+        // Загружаем данные награды из базы по ID
+        let escapedId = awardId.replacingOccurrences(of: "'", with: "''")
+        
+        guard let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada WHERE id = '\(escapedId)'"),
+              let firstRow = results.first else {
+            showAlert(message: "Не удалось загрузить данные награды")
+            return
+        }
+        
+        // Создаем объект Nagrada из данных базы
+        let nagrada = Nagrada(from: firstRow)
+        
+        // Открываем окно детальной информации
+        openAwardDetail(isNew: false, nagrada: nagrada)
+    }
+    
+    @objc @IBAction func buttonMakeChangesClicked(_ sender: Any) {
+        // Получаем параметры изменения
+        let changeTypeIndex = comboChangeType?.indexOfSelectedItem ?? 0
+        guard changeTypeIndex > 0 else {
+            showAlert(message: "Выберите тип изменения")
+            return
+        }
+        
+        let fieldIndex = comboFieldToChange?.indexOfSelectedItem ?? 0
+        guard fieldIndex > 0 else {
+            showAlert(message: "Выберите поле для изменения")
+            return
+        }
+        
+        let fieldName = GroupReplacementManager.shared.getFieldName(for: comboFieldToChange?.stringValue ?? "")
+        let textChange1 = textChange1?.string ?? ""
+        let textChange2 = textChange2?.string ?? ""
+        
+        // Проверяем, что есть выбранные награды
+        let selectedCount = selectedMedals.filter { $0.isSelected }.count
+        guard selectedCount > 0 else {
+            showAlert(message: "Выберите хотя бы одну награду для изменения")
+            return
+        }
+        
+        // Выполняем изменения
+        let success = GroupReplacementManager.shared.makeChanges(
+            selectedMedals: selectedMedals,
+            changeType: changeTypeIndex,
+            fieldName: fieldName,
+            textChange1: textChange1,
+            textChange2: textChange2
+        )
+        
+        if success {
+            showAlert(message: "Изменения применены к \(selectedCount) наградам")
+            // Обновляем данные в основной таблице
+            loadNagradaList()
+        } else {
+            showAlert(message: "Ошибка при применении изменений")
+        }
+    }
+    
     // MARK: - Number Conditions Actions
     
     @objc @IBAction func buttonLoadNomerCondClicked(_ sender: Any) {
@@ -1203,6 +1324,8 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTe
         } else if tableView == gridNomerConditions {
             // Показываем только реальные строки, без дополнительных пустых
             return nomerConditions.count
+        } else if tableView == listSelectedMedals {
+            return selectedMedals.count
         }
         return 0
     }
@@ -1313,6 +1436,64 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTe
                 cell?.textField?.stringValue = ""
             }
             return cell
+        }
+        
+        // Обработка listSelectedMedals (таблица найденных наград для групповой замены)
+        if tableView == listSelectedMedals {
+            guard let column = tableColumn, row < selectedMedals.count else { return nil }
+            
+            let medal = selectedMedals[row]
+            let cellIdentifier = column.identifier.rawValue
+            
+            if cellIdentifier == "Check" {
+                // Ячейка с чекбоксом
+                var cell = tableView.makeView(withIdentifier: column.identifier, owner: self) as? NSView
+                
+                if cell == nil {
+                    cell = NSView()
+                    cell?.identifier = column.identifier
+                    
+                    let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(checkboxClicked(_:)))
+                    checkbox.frame = NSRect(x: 8, y: 2, width: 20, height: 20)
+                    checkbox.tag = row
+                    cell?.addSubview(checkbox)
+                }
+                
+                // Обновляем состояние чекбокса
+                if let checkbox = cell?.subviews.first as? NSButton {
+                    checkbox.state = medal.isSelected ? .on : .off
+                    checkbox.tag = row
+                }
+                
+                return cell
+            } else if cellIdentifier == "Info" {
+                // Ячейка с информацией о награде
+                var cell = tableView.makeView(withIdentifier: column.identifier, owner: self) as? NSTableCellView
+                
+                if cell == nil {
+                    cell = NSTableCellView()
+                    cell?.identifier = column.identifier
+                    
+                    let textField = NSTextField()
+                    textField.isEditable = false
+                    textField.isBordered = false
+                    textField.backgroundColor = .clear
+                    textField.font = NSFont.systemFont(ofSize: 12)
+                    textField.lineBreakMode = .byTruncatingTail
+                    cell?.textField = textField
+                    cell?.addSubview(textField)
+                    textField.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        textField.leadingAnchor.constraint(equalTo: cell!.leadingAnchor, constant: 6),
+                        textField.trailingAnchor.constraint(equalTo: cell!.trailingAnchor, constant: -6),
+                        textField.topAnchor.constraint(equalTo: cell!.topAnchor, constant: 4),
+                        textField.bottomAnchor.constraint(equalTo: cell!.bottomAnchor, constant: -4)
+                    ])
+                }
+                
+                cell?.textField?.stringValue = medal.displayText
+                return cell
+            }
         }
         
         // Обработка gridNomerConditions (таблица условий на номера) - DataGridView-подобная таблица

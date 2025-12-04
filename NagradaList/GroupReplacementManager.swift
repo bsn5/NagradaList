@@ -62,8 +62,13 @@ class GroupReplacementManager {
             if let results = DatabaseManager.shared.executeQuery("SELECT * FROM nagrada") {
                 for row in results {
                     let nagrada = Nagrada(from: row)
-                    let medalInfo = MedalInfo(from: nagrada)
-                    let displayText = "\(nagrada.id); \(medalInfo.view)"
+                    var displayText = "\(nagrada.id); "
+                    if nagrada.nagrada == 0 {
+                        displayText += "К "
+                    } else {
+                        displayText += "М "
+                    }
+                    displayText += "\(nagrada.stepen ?? 0) ст № \(nagrada.nomer ?? 0)"
                     selectedMedals.append(SelectedMedal(
                         id: nagrada.id,
                         displayText: displayText,
@@ -82,10 +87,22 @@ class GroupReplacementManager {
         
         for row in results {
             let nagrada = Nagrada(from: row)
-            guard let fieldValue = row[fieldName] as? String else { continue }
+            
+            // Получаем значение поля (может быть String, Int64, или nil)
+            var fieldValue: String = ""
+            if let stringValue = row[fieldName] as? String {
+                fieldValue = stringValue
+            } else if let intValue = row[fieldName] as? Int64 {
+                fieldValue = String(intValue)
+            } else if let intValue = row[fieldName] as? Int {
+                fieldValue = String(intValue)
+            } else {
+                // Пропускаем записи с NULL значениями
+                continue
+            }
             
             var shouldAdd = false
-            var searchValue = value
+            var searchValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
             var fieldVal = fieldValue
             
             if !caseSensitive {
@@ -100,7 +117,6 @@ class GroupReplacementManager {
             }
             
             if shouldAdd {
-                let medalInfo = MedalInfo(from: nagrada)
                 var displayText = "\(nagrada.id); "
                 if nagrada.nagrada == 0 {
                     displayText += "К "
