@@ -1092,43 +1092,25 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     }
     
     func loadNomerConditions() {
-        // Заполняем таблицу данными из базы - находим максимальные номера для каждой комбинации тип/степень
+        // Заполняем таблицу данными из базы
+        // Структура таблицы: [id] TEXT NOT NULL, [nagrada] INTEGER, [stepen] INTEGER, [nomer] INTEGER
         // Сначала пытаемся загрузить из таблицы "Условия на номера"
         if let results = DatabaseManager.shared.executeQuery("SELECT * FROM \"Условия на номера\"") {
             nomerConditions = []
             for row in results {
-                // Пытаемся загрузить с разными вариантами названий колонок
-                let type: Int
-                let stepen: Int
-                let maxNomer: Int
+                // Используем правильные названия колонок: nagrada (вместо type), nomer (вместо max_nomer)
+                let type = (row["nagrada"] as? Int64).map { Int($0) } ?? 0
+                let stepen = (row["stepen"] as? Int64).map { Int($0) } ?? 0
+                let maxNomer = (row["nomer"] as? Int64).map { Int($0) } ?? 0
                 
-                if let t = (row["type"] as? Int64).map({ Int($0) }) {
-                    type = t
-                } else if let t = (row["nagrada"] as? Int64).map({ Int($0) }) {
-                    type = t
-                } else {
-                    type = 0
+                // Добавляем только если есть хотя бы одно непустое значение
+                if type > 0 || stepen > 0 || maxNomer > 0 {
+                    nomerConditions.append(NumberCondition(
+                        type: type,
+                        stepen: stepen,
+                        maxNomer: maxNomer
+                    ))
                 }
-                
-                if let s = (row["stepen"] as? Int64).map({ Int($0) }) {
-                    stepen = s
-                } else {
-                    stepen = 0
-                }
-                
-                if let m = (row["max_nomer"] as? Int64).map({ Int($0) }) {
-                    maxNomer = m
-                } else if let m = (row["nomer"] as? Int64).map({ Int($0) }) {
-                    maxNomer = m
-                } else {
-                    maxNomer = 0
-                }
-                
-                nomerConditions.append(NumberCondition(
-                    type: type,
-                    stepen: stepen,
-                    maxNomer: maxNomer
-                ))
             }
             print("✅ Загружено \(nomerConditions.count) условий из таблицы 'Условия на номера'")
         } else {
@@ -1159,43 +1141,55 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
             }
         }
         
+        // Обновляем таблицу
         gridNomerConditions?.reloadData()
         showAlert(message: "Заполнено условий: \(nomerConditions.count)")
     }
     
     func saveNomerConditions() {
         // Сохраняем в базу данных
+        // Структура таблицы: [id] TEXT NOT NULL, [nagrada] INTEGER, [stepen] INTEGER, [nomer] INTEGER
         // Сначала удаляем все существующие записи
         _ = DatabaseManager.shared.executeUpdate("DELETE FROM \"Условия на номера\"")
         
-        // Затем вставляем новые
+        // Фильтруем пустые строки (где все значения равны 0)
+        let validConditions = nomerConditions.filter { condition in
+            condition.type > 0 || condition.stepen > 0 || condition.maxNomer > 0
+        }
+        
+        guard !validConditions.isEmpty else {
+            showAlert(message: "Нет данных для сохранения. Заполните хотя бы одну строку.")
+            return
+        }
+        
+        // Затем вставляем новые записи
         var savedCount = 0
-        for condition in nomerConditions {
-            // Пытаемся вставить с колонками type, stepen, max_nomer
-            // Если таблица имеет другую структуру, используем альтернативный вариант
+        var errorMessages: [String] = []
+        
+        for (index, condition) in validConditions.enumerated() {
+            // Генерируем уникальный id для каждой записи
+            let id = "\(condition.type)_\(condition.stepen)_\(index)_\(UUID().uuidString.prefix(8))"
+            
+            // Используем правильные названия колонок: nagrada (вместо type), nomer (вместо max_nomer)
+            // Экранируем id для безопасности
+            let escapedId = id.replacingOccurrences(of: "'", with: "''")
             let query = """
-            INSERT INTO "Условия на номера" (type, stepen, max_nomer)
-            VALUES (\(condition.type), \(condition.stepen), \(condition.maxNomer))
+            INSERT INTO "Условия на номера" (id, nagrada, stepen, nomer)
+            VALUES ('\(escapedId)', \(condition.type), \(condition.stepen), \(condition.maxNomer))
             """
+            
             if DatabaseManager.shared.executeUpdate(query) {
                 savedCount += 1
             } else {
-                // Альтернативный вариант - если таблица имеет другую структуру
-                // Пытаемся использовать существующие колонки
-                let altQuery = """
-                INSERT INTO "Условия на номера" (nagrada, stepen, nomer)
-                VALUES (\(condition.type), \(condition.stepen), \(condition.maxNomer))
-                """
-                if DatabaseManager.shared.executeUpdate(altQuery) {
-                    savedCount += 1
-                }
+                errorMessages.append("Строка \(index + 1): тип=\(condition.type), степень=\(condition.stepen), номер=\(condition.maxNomer)")
             }
         }
         
-        if savedCount == nomerConditions.count {
+        if savedCount == validConditions.count {
             showAlert(message: "Сохранено условий: \(savedCount)")
         } else {
-            showAlert(message: "Ошибка: сохранено \(savedCount) из \(nomerConditions.count)")
+            let errorMsg = errorMessages.isEmpty ? "" : "\nНе удалось сохранить:\n\(errorMessages.joined(separator: "\n"))"
+            showAlert(message: "Ошибка: сохранено \(savedCount) из \(validConditions.count)\(errorMsg)")
         }
     }
 }
@@ -1470,6 +1464,7 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTe
         // Проверяем, что строка существует
         guard row >= 0 && row < nomerConditions.count,
               colIndex >= 0 && colIndex < tableView.tableColumns.count else {
+            print("⚠️ Выход за пределы массива: row=\(row), count=\(nomerConditions.count), colIndex=\(colIndex)")
             return
         }
         
@@ -1477,28 +1472,42 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTe
         let columnId = column.identifier.rawValue
         let newValue = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // Обновляем данные в массиве
         switch columnId {
         case "Type":
             // Преобразуем название типа обратно в число
             let typeNames = ["Крест", "Медаль"]
             if let typeIndex = typeNames.firstIndex(of: newValue) {
                 nomerConditions[row].type = typeIndex
+                print("✅ Обновлено: строка \(row), колонка Type = \(typeIndex)")
             } else if let typeRaw = Int(newValue), typeRaw >= 0 && typeRaw <= 1 {
                 nomerConditions[row].type = typeRaw
+                print("✅ Обновлено: строка \(row), колонка Type = \(typeRaw)")
+            } else {
+                print("⚠️ Неверное значение Type: '\(newValue)'")
             }
         case "Stepen":
             if let newStepen = Int(newValue) {
                 nomerConditions[row].stepen = newStepen
+                print("✅ Обновлено: строка \(row), колонка Stepen = \(newStepen)")
             } else if newValue.isEmpty {
                 nomerConditions[row].stepen = 0
+                print("✅ Обновлено: строка \(row), колонка Stepen = 0 (пусто)")
+            } else {
+                print("⚠️ Неверное значение Stepen: '\(newValue)'")
             }
         case "MaxNomer":
             if let newMaxNomer = Int(newValue) {
                 nomerConditions[row].maxNomer = newMaxNomer
+                print("✅ Обновлено: строка \(row), колонка MaxNomer = \(newMaxNomer)")
             } else if newValue.isEmpty {
                 nomerConditions[row].maxNomer = 0
+                print("✅ Обновлено: строка \(row), колонка MaxNomer = 0 (пусто)")
+            } else {
+                print("⚠️ Неверное значение MaxNomer: '\(newValue)'")
             }
         default:
+            print("⚠️ Неизвестная колонка: \(columnId)")
             break
         }
         
