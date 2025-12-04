@@ -942,22 +942,39 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     @objc @IBAction func buttonAddNomerCondRowClicked(_ sender: Any) {
         // Добавляем новую пустую строку (как в DataGridView)
         // Всегда добавляем только одну строку, независимо от того, пуста таблица или нет
-        let newRowIndex = nomerConditions.count
+        guard let grid = gridNomerConditions else { return }
+        
+        // Сохраняем текущее количество строк
+        let oldCount = nomerConditions.count
+        
+        // Добавляем только одну строку
         nomerConditions.append(NumberCondition(type: 0, stepen: 0, maxNomer: 0))
         
+        // Проверяем, что добавилась только одна строка
+        guard nomerConditions.count == oldCount + 1 else {
+            // Если что-то пошло не так, откатываем изменения
+            if nomerConditions.count > oldCount {
+                nomerConditions.removeLast()
+            }
+            return
+        }
+        
+        let newRowIndex = nomerConditions.count - 1
+        
         // Обновляем таблицу
-        guard let grid = gridNomerConditions else { return }
         grid.reloadData()
         
         // Выделяем новую строку после обновления
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             // Проверяем, что строка все еще существует
             if newRowIndex < self.nomerConditions.count {
                 grid.selectRowIndexes(IndexSet(integer: newRowIndex), byExtendingSelection: false)
                 grid.scrollRowToVisible(newRowIndex)
                 // Устанавливаем фокус на первую ячейку новой строки и начинаем редактирование
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    grid.editColumn(0, row: newRowIndex, with: nil, select: true)
+                    if newRowIndex < self.nomerConditions.count {
+                        grid.editColumn(0, row: newRowIndex, with: nil, select: true)
+                    }
                 }
             }
         }
@@ -966,48 +983,36 @@ class MainWindowController: NSWindowController, NSComboBoxDelegate {
     @objc @IBAction func buttonDeleteNomerCondRowClicked(_ sender: Any) {
         guard let grid = gridNomerConditions else { return }
         
-        // Получаем выбранные строки (может быть несколько)
-        let selectedIndexes = grid.selectedRowIndexes
+        // Определяем строку для удаления
+        var rowToDelete: Int = -1
         
-        // Если ничего не выбрано, проверяем clickedRow
-        if selectedIndexes.isEmpty {
-            let clickedRow = grid.clickedRow
-            if clickedRow >= 0 && clickedRow < nomerConditions.count {
-                // Удаляем строку по которой кликнули
-                nomerConditions.remove(at: clickedRow)
-                grid.reloadData()
-                
-                // Выделяем следующую строку или предыдущую, если удалили последнюю
-                if nomerConditions.count > 0 {
-                    let newSelection = min(clickedRow, nomerConditions.count - 1)
-                    DispatchQueue.main.async {
-                        grid.selectRowIndexes(IndexSet(integer: newSelection), byExtendingSelection: false)
-                        grid.scrollRowToVisible(newSelection)
-                    }
-                } else {
-                    grid.deselectAll(nil)
-                }
-            } else {
-                showAlert(message: "Выберите строку для удаления")
-            }
+        // Сначала проверяем выбранные строки
+        let selectedIndexes = grid.selectedRowIndexes
+        if !selectedIndexes.isEmpty {
+            // Берем первую выбранную строку (или последнюю, если выбрано несколько)
+            rowToDelete = selectedIndexes.first ?? -1
+        } else {
+            // Если ничего не выбрано, проверяем clickedRow
+            rowToDelete = grid.clickedRow
+        }
+        
+        // Проверяем, что строка валидна (включая последнюю строку)
+        guard rowToDelete >= 0 && rowToDelete < nomerConditions.count else {
+            showAlert(message: "Выберите строку для удаления")
             return
         }
         
-        // Удаляем все выбранные строки (начиная с последней, чтобы индексы не сбились)
-        let sortedIndexes = selectedIndexes.sorted(by: >) // Сортируем по убыванию
-        for index in sortedIndexes {
-            if index >= 0 && index < nomerConditions.count {
-                nomerConditions.remove(at: index)
-            }
-        }
+        // Удаляем строку (включая последнюю)
+        nomerConditions.remove(at: rowToDelete)
         
         // Обновляем таблицу
         grid.reloadData()
         
         // Выделяем следующую строку или предыдущую, если удалили последнюю
         if nomerConditions.count > 0 {
-            let firstDeleted = sortedIndexes.last ?? 0
-            let newSelection = min(firstDeleted, nomerConditions.count - 1)
+            // Если удалили не последнюю строку, выделяем ту же позицию
+            // Если удалили последнюю, выделяем новую последнюю строку
+            let newSelection = min(rowToDelete, nomerConditions.count - 1)
             DispatchQueue.main.async {
                 grid.selectRowIndexes(IndexSet(integer: newSelection), byExtendingSelection: false)
                 grid.scrollRowToVisible(newSelection)
@@ -1461,11 +1466,8 @@ extension MainWindowController: NSTableViewDataSource, NSTableViewDelegate, NSTe
         let row = tag / 1000
         let colIndex = tag % 1000
         
-        // Если строка выходит за пределы, добавляем новую
-        if row >= nomerConditions.count {
-            nomerConditions.append(NumberCondition(type: 0, stepen: 0, maxNomer: 0))
-        }
-        
+        // Не добавляем строки автоматически - только через кнопку "Добавить строку"
+        // Проверяем, что строка существует
         guard row >= 0 && row < nomerConditions.count,
               colIndex >= 0 && colIndex < tableView.tableColumns.count else {
             return
